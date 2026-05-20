@@ -920,6 +920,8 @@ def create_app() -> Flask:
                 if cookie_str:
                     from utils import save_cookie
                     save_cookie(cookie_str)
+                    OptionsCache.clear()
+                    OptionsCache.load(DEFAULT_TERM, DEFAULT_CAREER)
                     _grab_state["status"] = "ok"
                     _grab_state["cookie"] = cookie_str[:80] + "..."
                     _grab_state["message"] = "Cookie 已保存"
