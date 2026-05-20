@@ -1,0 +1,780 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>自动排课 - DKU 选课小助手</title>
+<style>
+:root{--line:#d7dee8;--text:#1f2933;--muted:#667085;--bg:#f5f7fb;--panel:#fff;--primary:#1e66f5;--danger:#a40000;--warn:#9a5b00;--ok:#0a7f2e}
+body{font-family:Arial,sans-serif;margin:24px;max-width:1500px;background:var(--bg);color:var(--text)}
+h1,h2,h3{margin:0 0 10px}a{color:var(--primary)}
+label{font-size:13px;color:#435060;font-weight:bold;display:block;margin-top:4px}
+input,select,textarea,button{margin-top:4px;margin-bottom:10px;padding:8px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
+textarea{width:100%;min-height:70px;font-family:Consolas,monospace;resize:vertical}
+input[type=range]{width:150px;padding:0;vertical-align:middle}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{border:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top;font-size:13px}th{background:#edf2f7}
+.button{display:inline-block;padding:8px 12px;background:var(--primary);color:white;text-decoration:none;border-radius:6px;border:none;cursor:pointer;font-size:14px}
+.button-secondary{background:#667085}.button-warn{background:#d97706}.button-sm{padding:3px 8px;font-size:12px}
+.button:disabled{opacity:0.5;cursor:not-allowed}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px}
+.panel{border:1px solid var(--line);border-radius:8px;padding:16px;margin-bottom:16px;background:var(--panel)}
+.form-grid{display:grid;grid-template-columns:repeat(4,minmax(190px,1fr));gap:12px 16px;align-items:start}
+.form-grid-2{display:grid;grid-template-columns:repeat(2,minmax(280px,1fr));gap:12px 16px;align-items:start}
+.form-inline-wrap{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:start}
+.form-inline-wrap .field{min-width:0;flex-shrink:0}
+.form-inline-wrap .field-wide,.form-inline-wrap .field-full{flex-basis:100%}
+.form-inline-wrap input:not([type=range]),.form-inline-wrap select{width:auto;min-width:80px}
+.form-inline-wrap input[type=number]{width:80px}
+.form-grid-3{display:grid;grid-template-columns:repeat(3,minmax(200px,1fr));gap:12px 16px;align-items:start}
+.field{display:flex;flex-direction:column}.field-wide{grid-column:span 2}.field-full{grid-column:1/-1}
+.inline-fields{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start}.inline-fields .field{min-width:140px}
+.small{color:var(--muted);font-size:12px}.mono{font-family:Consolas,monospace}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--danger)}
+.notice{border-left:4px solid #94a3b8;background:#f8fafc;padding:10px 12px;margin:10px 0}
+.notice.bad{border-left-color:var(--danger)}.notice.warn{border-left-color:var(--warn)}.notice.info{border-left-color:var(--primary)}
+.results-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:12px}
+.score{font-size:13px;color:var(--muted)}.pill{display:inline-block;padding:2px 6px;border-radius:999px;background:#edf2f7;font-size:12px}
+.bundle-list{margin:8px 0 0;padding:0;list-style:none}.bundle-list li{margin:4px 0}
+
+/* Tags */
+.course-tags{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0;min-height:24px}
+.course-tag{display:inline-flex;align-items:center;gap:3px;padding:3px 10px;border-radius:999px;font-size:12px;white-space:nowrap}
+.course-tag .tag-x{cursor:pointer;font-size:16px;color:#64748b;line-height:1;font-weight:bold}.course-tag .tag-x:hover{color:#dc2626}
+.tag-green{background:#d1fae5;color:#065f46}.tag-blue{background:#dbeafe;color:#1e40af}
+.tag-red{background:#fee2e2;color:#991b1b}.tag-purple{background:#f3e8ff;color:#6b21a8}
+.tag-yellow{background:#fef3c7;color:#92400e;border:2px solid #f59e0b;padding:4px 10px;border-radius:12px}.tag-yellow .tag-inner{background:#fff;padding:1px 6px;border-radius:999px;font-size:11px;margin:1px}
+.tag-add{display:inline-flex;align-items:center;padding:3px 8px;border:1px dashed #cbd5e1;border-radius:999px;cursor:pointer;font-size:12px;color:var(--primary)}
+.tag-add:hover{background:#eff6ff}
+
+/* Calendar */
+.time-calendar{margin-top:6px;user-select:none}
+.cal-header{display:grid;grid-template-columns:48px repeat(7,1fr);gap:1px}
+.cal-header span{text-align:center;font-size:11px;font-weight:bold;color:#435060;padding:4px 0;background:#f1f5f9;border-radius:3px}.cal-corner{background:transparent!important}
+.cal-body{display:grid;grid-template-columns:48px repeat(7,1fr);gap:1px}
+.cal-time{display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:#94a3b8;padding-right:4px}
+.cal-cell{aspect-ratio:1.5;background:#f8fafc;border:1px solid #e2e8f0;border-radius:3px;cursor:pointer}.cal-cell:hover{background:#dbeafe}.cal-cell.marked{background:#fca5a5;border-color:#ef4444}.cal-cell.dragging{background:#fecaca}
+
+/* Schedule grid */
+.schedule-shell{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:#fff;margin-top:12px}
+.schedule-grid{display:grid;grid-template-columns:64px repeat(7,minmax(132px,1fr));grid-template-rows:32px repeat(56,11px);min-width:1020px;position:relative}
+.grid-header{position:sticky;top:0;z-index:3;background:#f1f5f9;border-bottom:1px solid var(--line);border-right:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold}
+.time-label{border-right:1px solid var(--line);border-top:1px solid #eef2f7;color:#667085;font-size:11px;padding:2px 4px;background:#fbfdff}
+.day-line{border-right:1px solid #edf2f7;border-top:1px solid #eef2f7}
+.schedule-block{margin:1px 3px;padding:4px 5px;border-radius:6px;overflow:hidden;font-size:11px;line-height:1.25;border:1px solid rgba(0,0,0,0.13);z-index:2;box-sizing:border-box}
+.schedule-block strong{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.schedule-block span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.session-s1{filter:brightness(1.08)}.session-s2{filter:brightness(0.92)}.session-full{filter:grayscale(0.28)}
+.session-blocked{background:repeating-linear-gradient(45deg,#e5e7eb,#e5e7eb 6px,#f8fafc 6px,#f8fafc 12px);color:#4b5563}
+.bundle-color-0{background:#cde7ff}.bundle-color-1{background:#d8f3dc}.bundle-color-2{background:#ffe8a3}.bundle-color-3{background:#ffd6d6}.bundle-color-4{background:#dcd7ff}.bundle-color-5{background:#c8f7f0}.bundle-color-6{background:#f7d6ff}.bundle-color-7{background:#d7ecb7}.bundle-color-8{background:#ffd9b3}.bundle-color-9{background:#cfd8dc}.bundle-blocked{background:#e5e7eb}
+.flex-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.slider-group{display:flex;align-items:center;gap:6px}.slider-group label{min-width:100px;margin:0}
+
+@media(max-width:900px){body{margin:14px}.form-grid,.form-grid-2,.form-grid-3{grid-template-columns:1fr}.field-wide,.field-full{grid-column:auto}}
+</style>
+</head>
+<body>
+<h1>自动排课</h1>
+<div class="toolbar">
+  <a class="button button-secondary" href="{{ url_for('index') }}">返回首页</a>
+  <a class="button button-secondary" href="{{ url_for('courses', db_file=current_db, option_term=current_term, option_career=current_career) }}">课程筛选</a>
+  <button type="button" class="button button-secondary button-sm" onclick="exportConditions()">导出条件</button>
+  <button type="button" class="button button-secondary button-sm" onclick="importConditions()">导入条件</button>
+</div>
+
+<form method="post" action="{{ url_for('schedule') }}" id="scheduleForm">
+  <!-- 1. 基础信息 -->
+  <div class="panel">
+    <h2>基础信息</h2>
+    <div class="form-inline-wrap">
+      <div class="field"><label>数据库</label><select name="db_file" onchange="onDbChange(this.value)"><option value="">请选择</option>{% for dbfile in db_files %}<option value="{{ dbfile }}" {% if dbfile==current_db %}selected{% endif %}>{{ dbfile }}</option>{% endfor %}</select>{% if detail_warning %}<br><span style="color:#e67e22;font-size:11px;">⚠ {{ detail_warning }}</span>{% endif %}</div>
+      <div class="field"><label>学期 / 学制</label><input type="text" readonly value="{{ current_term }} / {{ current_career }}" style="background:#f8fafc;"></div>
+      <div class="field"><label>年级</label><select name="year_level" id="year_level" onchange="autoClassOf()"><option value="" {% if not form.year_level %}selected{% endif %}>未填写</option><option value="1" {% if form.year_level|string=='1' %}selected{% endif %}>大一</option><option value="2" {% if form.year_level|string=='2' %}selected{% endif %}>大二</option><option value="3" {% if form.year_level|string=='3' %}selected{% endif %}>大三</option><option value="4" {% if form.year_level|string=='4' %}selected{% endif %}>大四</option></select></div>
+      <div class="field"><label>Class of</label><input name="class_of" id="class_of" value="{{ form.class_of }}" type="number" min="2020" max="2100" placeholder="自动计算"></div>
+      <div class="field"><label>身份</label><select name="identity" id="identity"><option value="" {% if not form.identity %}selected{% endif %}>未填写</option>{% for id_val, id_info in identities.items() %}<option value="{{ id_val }}" {% if form.identity==id_val %}selected{% endif %}>{{ id_info.label }}</option>{% endfor %}</select></div>
+      <div class="field"><label>专业预设</label><select name="major_preset" id="major_preset" onchange="applyMajorPreset()"><option value="">不使用</option>{% for track in bulletin_tracks %}<option value="{{ track.key }}" {% if track.key==form.major_preset %}selected{% endif %}>{{ track.label }}（{{ track.course_count }}门）</option>{% endfor %}</select></div>
+      <div class="field-wide" id="major_courses_display" style="display:{{ 'block' if form.major_preset else 'none' }};">
+        <label>专业要求课程</label>
+        <div class="course-tags" id="tags_major"></div>
+        <textarea name="major_courses" id="ta_major" style="display:none;">{{ form.major_courses }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. 已修课程 -->
+  <div class="panel">
+    <h2>已修课程</h2>
+    <div class="course-tags" id="tags_completed"></div>
+    <div class="flex-row" style="margin-top:6px;">
+      <span class="tag-add" onclick="addCourseTag('completed')">+ 添加</span>
+      <button type="button" class="button button-warn button-sm" id="syncCompletedBtn" onclick="syncCompleted()">从 DKUHub 同步已修课程</button>
+    </div>
+    <textarea name="completed_courses" id="ta_completed" style="display:none;">{{ form.completed_courses }}</textarea>
+  </div>
+
+  <!-- 3. 硬性条件 -->
+  <div class="panel">
+    <h2>硬性条件</h2>
+    <div class="form-inline-wrap">
+      <div class="field-wide">
+        <label>一定要报的课</label>
+        <div class="course-tags" id="tags_must_include"></div>
+        <div class="flex-row">
+          <span class="tag-add" onclick="addCourseTag('must_include')">+ 添加</span>
+          <button type="button" class="button button-warn button-sm" id="syncEnrolledBtn" onclick="syncEnrolled()">从 DKUHub 同步已选课程</button>
+        </div>
+        <textarea name="must_include" id="ta_must_include" style="display:none;">{{ form.must_include }}</textarea>
+      </div>
+      <div class="field-wide">
+        <label>一定不能报的课</label>
+        <div class="course-tags" id="tags_must_exclude"></div>
+        <span class="tag-add" onclick="addCourseTag('must_exclude')">+ 添加</span>
+        <textarea name="must_exclude" id="ta_must_exclude" style="display:none;">{{ form.must_exclude }}</textarea>
+      </div>
+      <div class="field-full">
+        <label>不可用时间 <span class="small">（校队、社团等固定时间占用）</span></label>
+        <textarea name="blocked_times" id="blocked_times_ta" placeholder="Mo 08:30-10:00 校队&#10;TuTh 18:00-20:00" onchange="syncCalFromText()">{{ form.blocked_times }}</textarea>
+        <details style="margin-top:6px;"><summary class="small" style="cursor:pointer;">展开日历手画（点击/拖拽涂抹）</summary>
+        <div class="time-calendar" id="blocked_calendar">
+          <div class="cal-header"><span class="cal-corner"></span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+          <div class="cal-body">{% for h in range(8,22) %}<span class="cal-time">{{ '%02d:00'|format(h) }}</span>{% for d in range(7) %}<span class="cal-cell" data-day="{{ d }}" data-hour="{{ h }}"></span>{% endfor %}{% endfor %}</div>
+        </div></details>
+      </div>
+      <div class="field"><label>名额模式</label><select name="availability_mode"><option value="open_only" {% if form.availability_mode=='open_only' %}selected{% endif %}>只看有位子的课</option><option value="allow_waitlist" {% if form.availability_mode=='allow_waitlist' %}selected{% endif %}>含 Waitlist</option><option value="include_closed" {% if form.availability_mode=='include_closed' %}selected{% endif %}>含 Closed</option></select></div>
+      <div class="field"><label>无视 Reserved Seat</label><select name="ignore_reserved"><option value="false" {% if form.ignore_reserved=='false' %}selected{% endif %}>考虑 Reserved Seat</option><option value="true" {% if form.ignore_reserved=='true' %}selected{% endif %}>无视 Reserved Seat</option></select></div>
+
+      <hr style="flex-basis:100%;border:none;border-top:1px solid #e2e8f0;margin:2px 0;">
+
+      <div class="field"><label>Ignore 年级/等级要求</label><select name="ignore_grade_req"><option value="false" {% if form.ignore_grade_req=='false' %}selected{% endif %}>不无视</option><option value="true" {% if form.ignore_grade_req=='true' %}selected{% endif %}>无视</option></select></div>
+      <div class="field"><label>Consent 当作</label><select name="consent_as_true"><option value="false" {% if form.consent_as_true=='false' %}selected{% endif %}>False（拦截）</option><option value="true" {% if form.consent_as_true=='true' %}selected{% endif %}>True（放行）</option></select></div>
+      <div class="field"><label>Equivalent 当作</label><select name="equivalent_as_true"><option value="false" {% if form.equivalent_as_true=='false' %}selected{% endif %}>False（拦截）</option><option value="true" {% if form.equivalent_as_true=='true' %}selected{% endif %}>True（放行，跳警报）</option></select></div>
+      <div class="field"><label>Recommend 当作</label><select name="recommend_enforced"><option value="true" {% if form.recommend_enforced=='true' %}selected{% endif %}>强制要求</option><option value="false" {% if form.recommend_enforced=='false' %}selected{% endif %}>无视 Recommend</option></select></div>
+      <div class="field"><label>未知条件</label><select name="unknown_as_true"><option value="true" {% if form.unknown_as_true=='true' %}selected{% endif %}>当作 True（跳警报）</option><option value="false" {% if form.unknown_as_true=='false' %}selected{% endif %}>当作 False（拦截）</option></select></div>
+
+      <hr style="flex-basis:100%;border:none;border-top:1px solid #e2e8f0;margin:2px 0;">
+
+      <div class="field"><label>最低总学分</label><input name="min_units" value="{{ form.min_units }}" type="number" min="0" step="0.5"></div>
+      <div class="field"><label>最高总学分</label><input name="max_units" value="{{ form.max_units }}" type="number" min="0" step="0.5"></div>
+      <div class="field"><label>Session 最低</label><input name="session_min_units" value="{{ form.session_min_units }}" type="number" min="0" step="0.5"></div>
+      <div class="field"><label>Session 最高</label><input name="session_max_units" value="{{ form.session_max_units }}" type="number" min="0" step="0.5"></div>
+      <div class="field"><label>大一 S1 上限</label><input name="freshman_s1_max_units" value="{{ form.freshman_s1_max_units }}" type="number" min="0" step="0.5"></div>
+
+      <hr style="flex-basis:100%;border:none;border-top:1px solid #e2e8f0;margin:2px 0;">
+
+      <div class="field"><label>结果数量</label><input name="max_results" value="{{ form.max_results }}" type="number" min="1" max="30"></div>
+      <div class="field"><label>尝试次数</label><input name="max_attempts" value="{{ form.max_attempts }}" type="number" min="100" max="50000" step="100"></div>
+      <div class="field"><label>生成量倍率 <span class="small">（结果数×倍率=生成上限）</span></label><input name="target_multiplier" value="{{ form.target_multiplier }}" type="number" min="1" max="20"></div>
+      <div class="field"><label>随机种子</label><input name="random_seed" value="{{ form.random_seed }}"></div>
+    </div>
+  </div>
+
+  <!-- 4. 毕业要求 -->
+  <div class="panel">
+    <h2>毕业要求</h2>
+    <div class="form-inline-wrap">
+      <div class="field">
+        <label>Mini-Term</label>
+        <div class="flex-row">
+          <label style="margin:0;font-size:12px;"><input type="checkbox" name="enforce_miniterm" value="true" {% if form.enforce_miniterm=='true' %}checked{% endif %}> 参与排课</label>
+        </div>
+      </div>
+      <div class="field grad-rule" data-identity="chinese">
+        <label>体育课 (PE)</label>
+        <div class="flex-row">
+          <label style="margin:0;font-size:12px;">报 <input type="number" name="pe_count" id="pe_count" value="{{ form.pe_count }}" min="0" style="width:50px;"> 节</label>
+        </div>
+        <span id="pe_warn" style="color:#999;font-size:11px;display:none;">体育课每学期最多可报 2 节</span>
+        <script>
+        (function(){
+          var inp=document.getElementById('pe_count');
+          var sp=document.getElementById('pe_warn');
+          function chk(){ sp.style.display = parseInt(inp.value||0) > 2 ? '' : 'none'; }
+          inp.addEventListener('input',chk);
+          chk();
+        })();
+        </script>
+      </div>
+      {% for attr in [('qr','Quantitative Reasoning'),('ah','Arts & Humanities'),('ss','Social Sciences'),('ns','Natural Sciences')] %}
+      <div class="field">
+        <label>{{ attr[1] }}</label>
+        <div class="flex-row">
+          <input type="text" name="completed_{{ attr[0] }}" value="{{ form['completed_' + attr[0]] }}" placeholder="已完成" style="width:50px;"> / 4 units
+        </div>
+      </div>
+      {% endfor %}
+      <p class="small" style="margin:4px 0 0 0;">填 ≥4 则跳过该领域排课。留空或 &lt;4 会提高考虑报课的概率，专注专业课建议全填4。</p>
+    </div>
+    {% if graduation_summary %}
+    <details><summary class="small" style="cursor:pointer;">毕业要求摘要</summary>
+    <pre class="small mono" style="white-space:pre-wrap;max-height:150px;overflow-y:auto;">{{ graduation_summary }}</pre></details>
+    {% endif %}
+  </div>
+
+  <!-- 5. 软性偏好 -->
+  <div class="panel">
+    <h2>偏好设置 <span class="small">（0-100 控制影响强度，100=必须，0=无关；部分支持 -100~100）</span></h2>
+
+    <h3>想上的课</h3>
+    <div class="course-tags" id="tags_target_courses"></div>
+    <div class="flex-row">
+      <span class="tag-add" onclick="addTargetCourse()">+ 添加课程</span>
+    </div>
+    <textarea name="target_courses" id="ta_target_courses" style="display:none;">{{ form.target_courses }}</textarea>
+
+    <h3 style="margin-top:12px;">属性偏好 <span class="small">（-100~100）</span></h3>
+    <div class="inline-fields">
+      {% for attr in [('AH','Arts & Humanities'),('SS','Social Sciences'),('NS','Natural Sciences'),('QR','Quantitative Reasoning')] %}
+      <div class="field"><label>{{ attr[1] }}</label><input type="range" name="attr_{{ attr[0] }}" min="-3" max="3" step="0.5" value="{{ form['attr_' + attr[0]] }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form['attr_' + attr[0]] }}</span></div>
+      {% endfor %}
+    </div>
+
+    <h3 style="margin-top:12px;">排课偏好</h3>
+    <div class="inline-fields">
+      <div class="field"><label>专业 vs 兴趣</label><input type="range" name="major_focus" min="0" max="100" value="{{ form.major_focus }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.major_focus }}</span><span class="small">（100=只报专业课）</span></div>
+      <div class="field"><label>上 Recitation</label><input type="range" name="recitation_pref" min="0" max="100" value="{{ form.recitation_pref }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.recitation_pref }}</span></div>
+    </div>
+
+    <h3 style="margin-top:12px;">填充偏好</h3>
+    <div class="inline-fields">
+      <div class="field"><label>再报小课 (学分)</label><input name="two_credit_extra" value="{{ form.two_credit_extra }}" type="number" min="0" max="8" step="0.5" style="width:80px;"></div>
+      <div class="field">
+        <label style="margin-top:0;font-weight:normal;">
+          <input type="checkbox" name="allow_two_writing" value="true" {% if form.allow_two_writing=='true' %}checked{% endif %}> 允许多报两分写作课
+        </label>
+      </div>
+    </div>
+
+    <h3 style="margin-top:12px;">评分偏好</h3>
+    <div class="inline-fields">
+      <div class="field"><label>风险规避</label><input type="range" name="risk_aversion" min="0" max="100" value="{{ form.risk_aversion }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.risk_aversion }}</span></div>
+      <div class="field"><label>避开早八</label><input type="range" name="avoid_early" min="0" max="100" value="{{ form.avoid_early }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.avoid_early }}</span></div>
+      <div class="field"><label>避开晚课</label><input type="range" name="avoid_evening" min="0" max="100" value="{{ form.avoid_evening }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.avoid_evening }}</span></div>
+      <div class="field"><label>松散程度</label><input type="range" name="compactness" min="-100" max="100" value="{{ form.compactness }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.compactness }}</span></div>
+      <div class="field"><label>上二休五↔均匀</label><input type="range" name="day_distribution" min="-100" max="100" value="{{ form.day_distribution }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.day_distribution }}</span></div>
+      <div class="field"><label>PE 避开正课</label><input type="range" name="pe_gap" min="0" max="100" value="{{ form.pe_gap }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.pe_gap }}</span></div>
+      <div class="field"><label>减少总上课时间</label><input type="range" name="total_time" min="0" max="100" value="{{ form.total_time }}" oninput="this.nextElementSibling.textContent=this.value"><span class="small">{{ form.total_time }}</span></div>
+    </div>
+    <h4 style="margin-top:8px;font-size:12px;">偏好教授 <span style="font-weight:normal;color:#888;">（-100~100，0=无感）</span></h4>
+    <div class="course-tags" id="tags_prefer_professors"></div>
+    <div class="flex-row">
+      <span class="tag-add" onclick="addProfessorPref()">+ 添加教授偏好</span>
+    </div>
+    <textarea name="prefer_professors" id="ta_prefer_professors" style="display:none;">{{ form.prefer_professors }}</textarea>
+  </div>
+
+  <div class="panel" style="text-align:center;">
+    <button class="button" type="submit" id="btnSubmit" style="font-size:16px;padding:12px 32px;">生成课表</button>
+    <div id="loadingSpinner" style="display:none;margin-top:8px;color:var(--primary);">生成中...</div>
+    <div class="small" style="margin-top:8px;">数据库: {{ current_db or '未选择' }}</div>
+  </div>
+</form>
+
+<script>
+document.getElementById('scheduleForm').addEventListener('submit', function(){
+  document.getElementById('btnSubmit').disabled = true;
+  document.getElementById('loadingSpinner').style.display = 'block';
+});
+</script>
+
+{% if error %}<div class="notice bad">{{ error }}</div>{% endif %}
+
+<!-- Results -->
+{% if result %}
+{% if result.warnings %}<div class="notice warn">{% for w in result.warnings %}<div>{{ w }}</div>{% endfor %}</div>{% endif %}
+{% if result.blocked_reasons %}<div class="notice bad">{% for r in result.blocked_reasons %}<div>{{ r }}</div>{% endfor %}</div>{% endif %}
+{% if result.graduation_warnings %}<div class="notice info">{% for w in result.graduation_warnings %}<div>{{ w }}</div>{% endfor %}</div>{% endif %}
+
+{% if result.schedules %}
+<p class="small">共尝试 {{ result.searched_states }} 次，生成 {{ result.generated_count }} 个有效课表</p>
+{% for sched in result.schedules %}
+<div class="panel"><div class="results-head"><h2>方案 {{ loop.index }}</h2><span class="score">{{ sched.total_score|round(1) }}分 | {{ sched.total_units|round(1) }}学分 | {{ sched.active_days }}天</span></div>
+<table><thead><tr><th>课程</th><th>组合</th><th>学分</th><th>Session</th><th>说明</th><th></th></tr></thead>
+<tbody>{% for b in sched.selected %}<tr><td><strong class="mono">{{ b.primary_code }}</strong><br>{{ b.title }}</td><td><ul class="bundle-list">{% for sec in b.sections %}<li><span class="pill">{{ sec.component }} {{ sec.section }}</span> <a class="mono" href="/course/{{ sec.class_nbr }}?db_file={{ current_db }}&term={{ current_term }}&career={{ current_career }}">{{ sec.class_nbr }}</a> {{ sec.instructor_names }}</li>{% endfor %}</ul></td><td>{{ b.units|round(1) }}</td><td>{{ b.sections[0].session_code if b.sections else '-' }}</td><td>{% if b.warnings %}{% for w in b.warnings %}<div class="warn">{{ w }}</div>{% endfor %}{% endif %}{% if b.review_notes %}{% for n in b.review_notes %}<div class="warn">{{ n }}</div>{% endfor %}{% endif %}{% if not b.warnings and not b.review_notes %}<span class="ok">可排</span>{% endif %}</td><td><button class="button button-warn button-sm" onclick="excludeCourse('{{ b.primary_code }}')" title="加入排除列表">×</button></td></tr>{% endfor %}</tbody></table>
+
+<div class="schedule-shell"><div class="schedule-grid">
+<div class="grid-header" style="grid-column:1;grid-row:1;">时间</div>
+{% for day in ['周一','周二','周三','周四','周五','周六','周日'] %}<div class="grid-header" style="grid-column:{{ loop.index+1 }};grid-row:1;">{{ day }}</div>{% endfor %}
+{% for hour in range(8,22) %}<div class="time-label" style="grid-column:1;grid-row:{{ ((hour-8)*4)+2 }}/span 4;">{{ '%02d:00'|format(hour) }}</div>
+{% for day_idx in range(2,9) %}<div class="day-line" style="grid-column:{{ day_idx }};grid-row:{{ ((hour-8)*4)+2 }}/span 4;"></div>{% endfor %}{% endfor %}
+{% for entry in sched.timeline %}<div class="schedule-block {{ entry.color_class }} {{ entry.session_class }}" style="grid-column:{{ entry.grid_column }};grid-row:{{ entry.grid_row }}/span {{ entry.grid_span }};{% if entry.overlap_count and entry.overlap_count>1 %}width:calc(100%/{{ entry.overlap_count }} - 4px);margin:1px;margin-left:calc(100%/{{ entry.overlap_count }}*{{ entry.overlap_index }});{% endif %}"><strong>{{ entry.title }}</strong><span>{{ entry.start }}-{{ entry.end }} {{ entry.location }}</span>{% if entry.instructor %}<span>{{ entry.instructor }}</span>{% endif %}</div>{% endfor %}
+</div></div></div>
+{% endfor %}
+{% elif not result.blocked_reasons %}
+<div class="panel"><h2>无可行方案</h2><p class="small">放宽名额规则、提高学分上限或删除冲突时间。</p></div>
+{% endif %}
+{% endif %}
+
+<script>
+var CURRENT_DB = '{{ current_db }}';
+var CURRENT_TERM = '{{ current_term }}';
+var CURRENT_CAREER = '{{ current_career }}';
+var BULLETIN_TRACKS = {{ bulletin_tracks|tojson }};
+var IDENTITIES = {{ identities|tojson }};
+
+// ── Tag 系统 ──
+function makeTag(text, cls, raw) {
+  var t = document.createElement('span');
+  t.className = 'course-tag ' + (cls || 'tag-blue');
+  t.dataset.raw = raw || text;
+  var x = document.createElement('span');
+  x.className = 'tag-x';
+  x.textContent = '\u00d7';
+  x.onclick = function() { var fn = fnFromTag(t); t.remove(); syncTags(fn); };
+  t.appendChild(x);
+  t.appendChild(document.createTextNode(text));
+  return t;
+}
+
+function makeNinmTag(n, m, courses, raw) {
+  var w = document.createElement('span');
+  w.className = 'course-tag tag-yellow';
+  w.dataset.raw = raw;
+  var l = document.createElement('strong');
+  l.textContent = m + '/' + n + '选: ';
+  l.style.cssText = 'font-size:11px;margin-right:2px;';
+  w.appendChild(l);
+  for (var i = 0; i < courses.length; i++) {
+    var c = document.createElement('span');
+    c.className = 'tag-inner';
+    c.textContent = courses[i];
+    w.appendChild(c);
+  }
+  var x = document.createElement('span');
+  x.className = 'tag-x';
+  x.onclick = function() { w.remove(); syncTags(fnFromTag(w)); };
+  w.appendChild(x);
+  return w;
+}
+
+function fnFromTag(t) {
+  var id = t.parentElement.id;
+  return id ? id.replace('tags_', '') : '';
+}
+
+function syncTags(fieldName) {
+  var div = document.getElementById('tags_' + fieldName);
+  var ta = document.getElementById('ta_' + fieldName);
+  if (!div || !ta) return;
+  var lines = [];
+  div.querySelectorAll('.course-tag').forEach(function(t) {
+    lines.push(t.dataset.raw);
+  });
+  ta.value = lines.join('\n');
+}
+
+// ── 课程标签添加 ──
+function addCourseTag(fieldName) {
+  var v = prompt('输入课名（如 BIOL 110）或课号（如 #1247 或 1247）：');
+  if (!v || !v.trim()) return;
+  v = v.trim();
+  var div = document.getElementById('tags_' + fieldName);
+  var cls = 'tag-green';
+  var raw = v;
+  if (v.startsWith('#') || /^\d+$/.test(v)) {
+    if (v.startsWith('#')) v = v.substring(1);
+    cls = 'tag-green';
+    raw = '#' + v;
+    var tag = makeTag('#' + v, cls, raw);
+    div.appendChild(tag);
+    lookupNbrName(tag, v);
+  } else {
+    div.appendChild(makeTag(v, 'tag-blue', v));
+  }
+  syncTags(fieldName);
+}
+
+function lookupNbrName(tag, nbr) {
+  if (!CURRENT_DB) return;
+  var fd = new FormData();
+  fd.append('db_file', CURRENT_DB);
+  fd.append('class_nbrs', nbr);
+  fetch('/class_nbr_names', {method:'POST', body:fd})
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if (!data.ok || !data.courses[nbr]) return;
+      var info = data.courses[nbr];
+      var display = '#' + nbr + ' (' + info.course_code + ' ' + info.component + ' ' + info.class_section + ')';
+      tag.childNodes[tag.childNodes.length-1].textContent = display;
+      tag.dataset.raw = '#' + nbr;
+    });
+}
+
+// ── 想上的课 ──
+function addTargetCourse() {
+  var v = prompt('输入课名或课号（如 "BIOL 110" 或 "#1247"）：');
+  if (!v || !v.trim()) return;
+  v = v.trim();
+  var div = document.getElementById('tags_target_courses');
+  div.appendChild(makeTag(v, 'tag-blue', v));
+  syncTags('target_courses');
+}
+
+// ── 教授偏好 ──
+function addProfessorPref() {
+  var v = prompt('输入教授名字和偏好值（如 "Zhang:-50" 或 "Smith:80"）：');
+  if (!v || !v.trim()) return;
+  v = v.trim();
+  var div = document.getElementById('tags_prefer_professors');
+  var m = v.match(/^(.+?):(-?\d{1,3})\s*$/);
+  if (!m) { alert('格式：教授名:偏好值（如 Smith:80）'); return; }
+  var name = m[1].trim();
+  var val = parseInt(m[2]);
+  var cls = val > 0 ? 'tag-green' : (val < 0 ? 'tag-red' : 'tag-purple');
+  var raw = name + ':' + val;
+  div.appendChild(makeTag(raw, cls, raw));
+  syncTags('prefer_professors');
+}
+
+// ── 同步已完成/已选 ──
+function syncCompleted() {
+  if (!CURRENT_DB) { alert('请先选择数据库'); return; }
+  var btn = document.querySelector('#syncCompletedBtn') || event.target;
+  btn.disabled = true; var orig = btn.textContent; btn.textContent = '同步中...';
+  var fd = new FormData();
+  fd.append('term', CURRENT_TERM);
+  fd.append('career', CURRENT_CAREER);
+  fetch('/sync_dku_info', {method:'POST', body:fd})
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if (!data.ok) { alert(data.error); btn.disabled = false; btn.textContent = orig; return; }
+      if (data.completed.length) {
+        var ta = document.getElementById('ta_completed');
+        var exLines = (ta.value || '').split('\n').filter(function(s){return s.trim();});
+        var exSet = {};
+        exLines.forEach(function(s){exSet[s.trim().toUpperCase()]=true;});
+        var added = 0;
+        data.completed.forEach(function(c){
+          if (!exSet[c.toUpperCase()]) { exLines.push(c); exSet[c.toUpperCase()]=true; added++; }
+        });
+        ta.value = exLines.join('\n');
+        initTags('completed');
+        alert('已同步 ' + added + ' 门新已修课程（共 ' + exLines.length + ' 门）');
+      } else {
+        alert('DKU 返回 0 门已修课程');
+      }
+      btn.disabled = false; btn.textContent = orig;
+    }).catch(function(e){ alert('网络错误: '+e.message); btn.disabled = false; btn.textContent = orig; });
+}
+
+function syncEnrolled() {
+  if (!CURRENT_DB) { alert('请先选择数据库'); return; }
+  var btn = document.querySelector('#syncEnrolledBtn') || event.target;
+  btn.disabled = true; var orig = btn.textContent; btn.textContent = '同步中...';
+  var fd = new FormData();
+  fd.append('term', CURRENT_TERM);
+  fd.append('career', CURRENT_CAREER);
+  fetch('/sync_dku_info', {method:'POST', body:fd})
+    .then(function(r){return r.json();})
+    .then(function(data){
+      if (!data.ok) { alert(data.error); btn.disabled = false; btn.textContent = orig; return; }
+      if (data.enrolled.length) {
+        var ta = document.getElementById('ta_must_include');
+        var exLines = (ta.value || '').split('\n').filter(function(s){return s.trim();});
+        var exSet = {};
+        exLines.forEach(function(s){exSet[s.trim()]=true;});
+        var added = 0;
+        data.enrolled.forEach(function(n){
+          var tag = '#' + n;
+          if (!exSet[tag]) { exLines.push(tag); exSet[tag]=true; added++; }
+        });
+        ta.value = exLines.join('\n');
+        initTags('must_include');
+        alert('已同步 ' + added + ' 门新已选课程（共 ' + exLines.length + ' 门）');
+      } else {
+        alert('DKU 返回 0 门已选课程');
+      }
+      btn.disabled = false; btn.textContent = orig;
+    }).catch(function(e){ alert('网络错误: '+e.message); btn.disabled = false; btn.textContent = orig; });
+}
+
+// ── 初始化标签显示 ──
+function initTags(fieldName) {
+  var ta = document.getElementById('ta_' + fieldName);
+  var div = document.getElementById('tags_' + fieldName);
+  if (!ta || !div) return;
+  div.innerHTML = '';
+  var raw = ta.value || '';
+  raw.split('\n').forEach(function(line) {
+    line = line.trim();
+    if (!line) return;
+    var tag;
+    if (line.startsWith('#')) {
+      tag = makeTag(line, 'tag-green', line.substring(1));
+      lookupNbrName(tag, line.substring(1));
+    } else if (/^\d+$/.test(line)) {
+      tag = makeTag('#' + line, 'tag-green', line);
+      lookupNbrName(tag, line);
+    } else {
+      tag = makeTag(line, 'tag-blue', line);
+    }
+    div.appendChild(tag);
+  });
+}
+
+function initAllTags() {
+  ['completed','must_include','must_exclude','major','target_courses','prefer_professors'].forEach(initTags);
+  // 想上的课特殊处理：兼容旧格式 "课名:优先级"
+  var tta = document.getElementById('ta_target_courses');
+  var tdiv = document.getElementById('tags_target_courses');
+  if (tta && tdiv && !tdiv.children.length) {
+    (tta.value||'').split('\n').forEach(function(line){
+      line = line.trim(); if (!line) return;
+      var m = line.match(/^(.+?):\d{1,3}\s*$/);
+      var code = m ? m[1].trim() : line;
+      tdiv.appendChild(makeTag(code, 'tag-blue', code));
+    });
+  }
+}
+
+// ── 专业预设 ──
+function applyMajorPreset() {
+  var sel = document.getElementById('major_preset');
+  if (!sel || !sel.value) {
+    document.getElementById('major_courses_display').style.display = 'none';
+    document.getElementById('ta_major').value = '';
+    document.getElementById('tags_major').innerHTML = '';
+    return;
+  }
+  document.getElementById('major_courses_display').style.display = 'block';
+  var track = BULLETIN_TRACKS.find(function(t){return t.key===sel.value;});
+  if (!track) return;
+  var ta = document.getElementById('ta_major');
+  var div = document.getElementById('tags_major');
+  div.innerHTML = '';
+  var codes = [];
+  track.requirement_groups.forEach(function(g){
+    if (g.kind === 'required') {
+      g.course_codes.forEach(function(c){codes.push(c);});
+    } else if (g.kind === 'choice') {
+      div.appendChild(makeNinmTag(g.course_codes.length, g.min_count, g.course_codes,
+        'n_in_m(' + g.course_codes.length + ',' + g.min_count + ',' + g.course_codes.map(function(c){return '"'+c+'"';}).join(',') + ')'));
+      // choice 组内的课只显示在 n_in_m 标签内，不另外单独列出
+    }
+  });
+  codes.forEach(function(c){ div.appendChild(makeTag(c, 'tag-blue', c)); });
+  syncTags('major');
+}
+
+// ── 级数/Class Of ──
+function autoClassOf() {
+  var lv = document.getElementById('year_level').value;
+  if (!lv) return;
+  var term = CURRENT_TERM || '2268';
+  var yr = parseInt(term.substring(1,3)) + 2000;
+  var isFall = term.endsWith('8');
+  var co = isFall ? yr + 5 - parseInt(lv) : yr + 4 - parseInt(lv);
+  document.getElementById('class_of').value = co;
+}
+
+// ── 数据库切换 ──
+function onDbChange(dbFile) {
+  if (dbFile) window.location.href = '/schedule?db_file=' + encodeURIComponent(dbFile);
+}
+
+// ── 日历 ──
+var DAY_MAP = ['Mo','Tu','We','Th','Fr','Sa','Su'];
+var CAL_DRAGGING = false, CAL_DRAG_MARK = true;
+
+function syncCalFromText() {
+  var ta = document.getElementById('blocked_times_ta');
+  var cal = document.getElementById('blocked_calendar');
+  if (!ta || !cal) return;
+  cal.querySelectorAll('.cal-cell').forEach(function(c){c.classList.remove('marked');});
+  ta.value.split('\n').forEach(function(line){
+    line = line.trim(); if (!line || line.startsWith('#')) return;
+    var m = line.match(/^([A-Za-z]+)\s+(\d{1,2})[.:](\d{2})\s*-\s*(\d{1,2})[.:](\d{2})/);
+    if (!m) return;
+    markRange(cal, m[1], parseInt(m[2])*60+parseInt(m[3]), parseInt(m[4])*60+parseInt(m[5]));
+  });
+}
+
+function markRange(cal, ds, sm, em) {
+  var days = parseDayString(ds);
+  if (!days.length) return;
+  for (var h = 8; h < 22; h++) {
+    var cs = h*60, ce = (h+1)*60;
+    if (sm < ce && em > cs) {
+      days.forEach(function(d){
+        var c = cal.querySelector('.cal-cell[data-day="'+d+'"][data-hour="'+h+'"]');
+        if (c) c.classList.add('marked');
+      });
+    }
+  }
+}
+
+function parseDayString(s) {
+  s = s.replace(/Monday|Mon/gi,'Mo').replace(/Tuesday|Tues|Tue/gi,'Tu')
+       .replace(/Wednesday|Wed/gi,'We').replace(/Thursday|Thurs|Thur|Thu/gi,'Th')
+       .replace(/Friday|Fri/gi,'Fr').replace(/Saturday|Sat/gi,'Sa').replace(/Sunday|Sun/gi,'Su');
+  var days = [];
+  for (var i=0;i<s.length;i+=2){var t=s.substring(i,i+2);var idx=DAY_MAP.indexOf(t);if(idx>=0)days.push(idx);}
+  return days;
+}
+
+function syncTextFromCal() {
+  var cal = document.getElementById('blocked_calendar');
+  if (!cal) return;
+  var ta = document.getElementById('blocked_times_ta');
+  if (!ta) return;
+  var byDay = {};
+  for (var d=0;d<7;d++) {
+    var cells = cal.querySelectorAll('.cal-cell[data-day="'+d+'"].marked');
+    if (!cells.length) continue;
+    var hours = []; cells.forEach(function(c){hours.push(parseInt(c.dataset.hour));});
+    hours.sort(function(a,b){return a-b;});
+    var ranges = [], start = hours[0], end = hours[0]+1;
+    for (var i=1;i<hours.length;i++){
+      if (hours[i]===end) end=hours[i]+1;
+      else{ranges.push([start,end]);start=hours[i];end=hours[i]+1;}
+    }
+    ranges.push([start,end]); byDay[d] = ranges;
+  }
+  var groups=[], used={};
+  for (var d=0;d<7;d++){
+    if (used[d]||!byDay[d]) continue;
+    var rngs=JSON.stringify(byDay[d]), dg=[d]; used[d]=true;
+    for (var d2=d+1;d2<7;d2++){
+      if (!used[d2]&&byDay[d2]&&JSON.stringify(byDay[d2])===rngs){dg.push(d2);used[d2]=true;}
+    }
+    groups.push({days:dg,ranges:JSON.parse(rngs)});
+  }
+  var lines=[];
+  groups.forEach(function(g){
+    var ds=g.days.map(function(d){return DAY_MAP[d];}).join('');
+    g.ranges.forEach(function(r){lines.push(ds+' '+('0'+r[0]).slice(-2)+':00-'+('0'+r[1]).slice(-2)+':00');});
+  });
+  ta.value = lines.join('\n');
+}
+
+function initCal() {
+  var cal = document.getElementById('blocked_calendar');
+  if (!cal) return;
+  syncCalFromText();
+  cal.querySelectorAll('.cal-cell').forEach(function(cell){
+    cell.addEventListener('mousedown',function(e){
+      e.preventDefault();CAL_DRAGGING=true;
+      CAL_DRAG_MARK=!cell.classList.contains('marked');
+      cell.classList.toggle('marked',CAL_DRAG_MARK);
+      cell.classList.add('dragging');syncTextFromCal();
+    });
+    cell.addEventListener('mouseenter',function(e){
+      if(!CAL_DRAGGING)return;
+      cell.classList.toggle('marked',CAL_DRAG_MARK);
+      cell.classList.add('dragging');syncTextFromCal();
+    });
+    cell.addEventListener('mouseup',function(e){
+      CAL_DRAGGING=false;
+      cal.querySelectorAll('.cal-cell.dragging').forEach(function(c){c.classList.remove('dragging');});
+    });
+  });
+  document.addEventListener('mouseup',function(){
+    if(CAL_DRAGGING){CAL_DRAGGING=false;
+      cal.querySelectorAll('.cal-cell.dragging').forEach(function(c){c.classList.remove('dragging');});
+    }
+  });
+}
+
+// ── 导入导出条件 ──
+function exportConditions() {
+  var form = document.getElementById('scheduleForm');
+  var data = {};
+  var els = form.querySelectorAll('input, select, textarea');
+  els.forEach(function(el){
+    if (!el.name) return;
+    if (el.type === 'file') return;
+    if (el.type === 'checkbox') data[el.name] = el.checked ? 'true' : 'false';
+    else data[el.name] = el.value;
+  });
+  // 加入数据库信息
+  data['__db_file'] = CURRENT_DB;
+  data['__term'] = CURRENT_TERM;
+  data['__career'] = CURRENT_CAREER;
+  data['__exported_at'] = new Date().toISOString();
+  var json = JSON.stringify(data, null, 2);
+  var blob = new Blob([json], {type:'application/json'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'schedule_conditions_' + (CURRENT_TERM || 'unknown') + '.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function importConditions() {
+  var inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = '.json';
+  inp.onchange = function(){
+    var file = inp.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(e){
+      try {
+        var data = JSON.parse(e.target.result);
+        var form = document.getElementById('scheduleForm');
+        // 先同步所有 tag 到 textarea
+        ['completed','must_include','must_exclude','major','target_courses','prefer_professors'].forEach(function(fn){
+          syncTags(fn);
+        });
+        for (var key in data) {
+          if (key.startsWith('__')) continue;
+          var el = form.querySelector('[name="' + key + '"]');
+          if (el) {
+            el.value = data[key];
+            // 触发 onchange 以便 slider 更新显示
+            if (el.tagName === 'INPUT' && el.type === 'range') {
+              var span = el.nextElementSibling;
+              if (span) span.textContent = el.value;
+            }
+          }
+        }
+        // 如果没选专业预设，清空专业课
+        if (!data.major_preset) {
+          var mta = form.querySelector('[name="major_courses"]');
+          if (mta) mta.value = '';
+        }
+        // 重新渲染所有 tag
+        initAllTags();
+        initCal();
+        alert('条件已导入。请确认专业预设等下拉选项。');
+      } catch(ex) {
+        alert('导入失败：' + ex.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+// ── 启动 ──
+window.addEventListener('DOMContentLoaded', function(){
+  initAllTags();
+  initCal();
+  if (document.getElementById('major_preset').value) applyMajorPreset();
+  // PE 只对中国学生显示
+  var identity = document.getElementById('identity');
+  if (identity) identity.addEventListener('change', toggleIdentityRules);
+  toggleIdentityRules();
+});
+
+function toggleIdentityRules() {
+  var idv = document.getElementById('identity').value;
+  document.querySelectorAll('.grad-rule[data-identity]').forEach(function(el){
+    el.style.display = (el.dataset.identity === 'chinese' && idv === 'chinese') ? '' : 'none';
+  });
+}
+
+function excludeCourse(code) {
+  if (!code) return;
+  var ta = document.getElementById('ta_must_exclude');
+  var lines = (ta.value || '').split('\n').filter(function(s){return s.trim();});
+  if (lines.indexOf(code) < 0) {
+    lines.push(code);
+    ta.value = lines.join('\n');
+    initTags('must_exclude');
+  }
+}
+</script>
+</body>
+</html>

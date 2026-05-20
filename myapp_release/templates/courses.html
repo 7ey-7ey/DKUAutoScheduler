@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>课程筛选 - DKU 选课小助手</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; max-width: 1400px; background: #f6f7f9; color: #1f2933; }
+    h1, h2 { margin-bottom: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; font-size: 14px; vertical-align: top; }
+    th { background: #f5f5f5; }
+    input, select, button { margin-top: 4px; margin-bottom: 8px; padding: 8px; box-sizing: border-box; border: 1px solid #cdd5df; border-radius: 6px; background: #fff; }
+    input::placeholder { color: #aeb8c4; }
+    .button { display: inline-block; padding: 8px 12px; background: #1e66f5; color: white; text-decoration: none; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; line-height: normal; }
+    .button-secondary { background: #666; }
+    .small { color: #666; font-size: 12px; }
+    .mono { font-family: Consolas, monospace; }
+    .card { border: 1px solid #dde3ea; border-radius: 8px; padding: 16px; margin-bottom: 16px; background: #fff; }
+    .ok { color: #0a7f2e; }
+    .warn { color: #b36b00; }
+    .bad { color: #a40000; }
+    .collapsible { background: #eef2f7; color: #263342; cursor: pointer; padding: 8px 12px; border: 1px solid #cdd5df; text-align: left; outline: none; font-size: 14px; }
+    .active, .collapsible:hover { background-color: #dfe7f1; }
+    .course-filter-form { position: relative; }
+    .content {
+      padding: 10px 18px;
+      display: none;
+      position: absolute;
+      z-index: 20;
+      left: 0;
+      right: 0;
+      top: 100%;
+      max-height: 70vh;
+      overflow-y: auto;
+      background-color: #f9f9f9;
+      border: 1px solid #dde3ea;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    }
+    .filter-group { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+    .filter-group + .filter-group { border-top: 1px solid #ddd; margin-top: 10px; padding-top: 10px; }
+    .filter-unit { display: inline-flex; flex-direction: column; gap: 4px; }
+    .filter-unit > label, .filter-unit-title { color: #555; font-size: 13px; font-weight: bold; }
+    .filter-unit-row { display: flex; gap: 8px; align-items: center; }
+    .filter-unit-row label { display: flex; gap: 4px; align-items: center; white-space: nowrap; }
+    .time-range { display: flex; gap: 8px; align-items: center; }
+    .time-range span { color: #555; white-space: nowrap; }
+    .content input[name="catalog_nbr_prefix"] { width: 12.5ch; }
+    .content input[name="catalog_nbr"] { width: 10ch; }
+    .content input[name="class_section"] { width: 12.5ch; }
+    .content input[name="days"] { width: 25ch; }
+    .content input[name="start_time_min"],
+    .content input[name="start_time_max"],
+    .content input[name="end_time_min"],
+    .content input[name="end_time_max"] { width: 12.5ch; }
+    .paired-controls { display: flex; gap: 8px; align-items: center; }
+    .results-card { content-visibility: auto; contain-intrinsic-size: 900px; }
+    .display-options { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #dde3ea; border-radius: 8px; background: #f7f9fc; }
+    .display-options-title { color: #555; font-size: 13px; font-weight: bold; }
+    .display-options label { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; font-size: 13px; }
+    .display-options input { margin: 0; padding: 0; }
+    .is-column-hidden { display: none; }
+  </style>
+</head>
+<body>
+  {% macro missing() -%}<span class="bad">信息缺失</span>{%- endmacro %}
+  {% macro show(value, class_name='') -%}
+    {%- if value is not none and value|string|trim -%}
+      {%- if class_name -%}<span class="{{ class_name }}">{{ value }}</span>{%- else -%}{{ value }}{%- endif -%}
+    {%- else -%}
+      {{ missing() }}
+    {%- endif -%}
+  {%- endmacro %}
+
+  <h1>课程筛选</h1>
+  <p>
+    <a class="button button-secondary" href="{{ url_for('index') }}">返回首页</a>
+    <a class="button button-secondary" href="{{ url_for('schedule') }}">自动排课</a>
+  </p>
+
+  <div class="card">
+    <h2>筛选课程</h2>
+    <form class="course-filter-form" method="get" action="{{ url_for('courses') }}">
+      <input type="hidden" name="option_term" value="{{ current_term }}">
+      <input type="hidden" name="option_career" value="{{ current_career }}">
+      <label>当前数据库：</label>
+      <select name="db_file">
+        <option value="" {% if not current_db %}selected{% endif %}>请选择数据库</option>
+        {% for dbfile in db_files %}
+          <option value="{{ dbfile }}" {% if dbfile == current_db %}selected{% endif %}>{{ dbfile }}</option>
+        {% endfor %}
+      </select>
+      <button class="button" type="submit">切换</button>
+      {% if current_db %}
+      <input name="q" value="{{ q }}" placeholder="快速搜索（课程名/老师）" style="width:60%;">
+      <button class="button" type="submit">搜索</button>
+      <a class="button button-secondary" href="{{ url_for('courses', db_file=current_db, option_term=current_term, option_career=current_career) }}">清空条件</a>
+      <button type="button" class="collapsible">高级筛选 ▸</button>
+      <div class="content">
+        <div class="filter-group">
+        <div class="filter-unit">
+        <label>学科</label>
+        <select name="subject">
+          <option value="">全部</option>
+          {% for s in subjects %}
+            <option value="{{ s.subject }}" {% if s.subject == subject_filter %}selected{% endif %}>{{ s.subject }} - {{ s.descr }}</option>
+          {% endfor %}
+        </select>
+        </div>
+        <div class="filter-unit"><label>课号前缀</label><input name="catalog_nbr_prefix" value="{{ catalog_nbr_prefix }}" placeholder="如 1"></div>
+        <div class="filter-unit"><label>精确课号</label><input name="catalog_nbr" value="{{ catalog_nbr }}" placeholder="如 105"></div>
+        <div class="filter-unit">
+        <label>课程类型</label>
+        <select name="component">
+          <option value="">全部</option>
+          {% for option in component_options %}
+            <option value="{{ option }}" {% if option == component %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+        </div>
+        <div class="filter-unit"><label>Section</label><input name="class_section" value="{{ class_section }}" placeholder="如 001 或 L"></div>
+        <div class="filter-unit"><label>教授</label><input name="instructor_name" value="{{ instructor_name }}" placeholder="输入教授姓名"></div>
+        </div>
+        <div class="filter-group">
+        <div class="filter-unit">
+        <label>Session</label>
+        <select name="session_code">
+          <option value="">全部</option>
+          {% for sess in sessions %}
+            <option value="{{ sess.session_code }}" {% if sess.session_code == session_code %}selected{% endif %}>{{ sess.descr }}</option>
+          {% endfor %}
+        </select>
+        </div>
+        <div class="filter-unit">
+          <label>星期</label>
+          <div class="filter-unit-row">
+            <input name="days" value="{{ days }}" placeholder="如 Mo">
+            <label><input type="checkbox" name="days_exact" value="true" {% if days_exact %}checked{% endif %}>完全匹配</label>
+          </div>
+        </div>
+        <div class="filter-unit">
+          <label>开始时间</label>
+          <div class="time-range">
+            <input name="start_time_min" value="{{ start_time_min }}" placeholder="HH:MM">
+            <span>&lt;= 开始时间 &lt;=</span>
+            <input name="start_time_max" value="{{ start_time_max }}" placeholder="HH:MM">
+          </div>
+        </div>
+        <div class="filter-unit">
+          <label>结束时间</label>
+          <div class="time-range">
+            <input name="end_time_min" value="{{ end_time_min }}" placeholder="HH:MM">
+            <span>&lt;= 结束时间 &lt;=</span>
+            <input name="end_time_max" value="{{ end_time_max }}" placeholder="HH:MM">
+          </div>
+        </div>
+        <div class="filter-unit">
+        <label>上课时长（分钟）</label>
+        <select name="duration">
+          <option value="">全部</option>
+          {% for option in duration_options %}
+            <option value="{{ option }}" {% if option|string == duration %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+        </div>
+        </div>
+        <div class="filter-group">
+        <div class="filter-unit">
+        <label>Units</label>
+        <select name="units">
+          <option value="">全部</option>
+          {% for option in unit_options %}
+            <option value="{{ option }}" {% if option == units %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+        </div>
+        <div class="filter-unit">
+        <label>评分方式</label>
+        <select name="grading_basis">
+          <option value="">全部</option>
+          {% for option in grading_basis_options %}
+            <option value="{{ option }}" {% if option == grading_basis %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+        </div>
+        <div class="filter-unit">
+          <span class="filter-unit-title">Course Attribute</span>
+          <div class="paired-controls">
+            <select name="course_attr" id="course-attr">
+              <option value="">全部大类</option>
+              {% for option in course_attribute_options %}
+                <option value="{{ option.crse_attr }}" {% if option.crse_attr == course_attr %}selected{% endif %}>{{ option.crse_attr }} - {{ option.descr }}</option>
+              {% endfor %}
+            </select>
+            <select name="course_attr_value" id="course-attr-value">
+              <option value="">全部小类</option>
+            </select>
+          </div>
+        </div>
+        <div class="filter-unit">
+        <label>Requirement Designation</label>
+        <select name="requirement_designation">
+          <option value="">全部</option>
+          {% for option in requirement_designation_options %}
+            <option value="{{ option.rqmnt_designtn }}" {% if option.rqmnt_designtn == requirement_designation %}selected{% endif %}>
+              {{ option.rqmnt_designtn }}{% if option.descr %} - {{ option.descr }}{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        </div>
+        <div class="filter-unit">
+        <label>Combined Section</label>
+        <select name="is_combined">
+          <option value="">全部</option>
+          <option value="Y" {% if is_combined == 'Y' %}selected{% endif %}>是</option>
+          <option value="N" {% if is_combined == 'N' %}selected{% endif %}>否</option>
+        </select>
+        </div>
+        <div class="filter-unit">
+        <label>状态</label>
+        <select name="enrl_stat">
+          <option value="">全部</option>
+          <option value="Open" {% if enrl_stat == 'Open' %}selected{% endif %}>Open</option>
+          <option value="Closed" {% if enrl_stat == 'Closed' %}selected{% endif %}>Closed</option>
+          <option value="Wait List" {% if enrl_stat == 'Wait List' %}selected{% endif %}>Wait List</option>
+        </select>
+        </div>
+        </div>
+        <div class="filter-group">
+        <div class="filter-unit">
+        <label>教学楼</label>
+        <select name="building">
+          <option value="">全部</option>
+          {% for option in building_options %}
+            <option value="{{ option }}" {% if option == building %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+        </div>
+        <div class="filter-unit"><label>具体教室</label><input name="classroom" value="{{ classroom }}" placeholder="如 IB 2028"></div>
+        </div>
+        <div class="filter-group">
+        <div class="filter-unit">
+        <label>Requisite</label>
+        <select name="requisite_tag">
+          <option value="">全部</option>
+          <option value="has_prereq" {% if requisite_tag == 'has_prereq' %}selected{% endif %}>有前置课</option>
+          <option value="has_coreq" {% if requisite_tag == 'has_coreq' %}selected{% endif %}>有同修课</option>
+          <option value="has_anti" {% if requisite_tag == 'has_anti' %}selected{% endif %}>有反修课</option>
+          <option value="has_grade" {% if requisite_tag == 'has_grade' %}selected{% endif %}>有年级限制</option>
+          <option value="has_consent" {% if requisite_tag == 'has_consent' %}selected{% endif %}>有Consent</option>
+          <option value="has_unknown" {% if requisite_tag == 'has_unknown' %}selected{% endif %}>有未解析部分</option>
+        </select>
+        </div>
+        <div class="filter-unit">
+        <label>Reserved Seat</label>
+        <select name="reserved_seats_tag">
+          <option value="">全部</option>
+          <option value="has_class_year" {% if reserved_seats_tag == 'has_class_year' %}selected{% endif %}>有班级限制</option>
+          <option value="has_year_level" {% if reserved_seats_tag == 'has_year_level' %}selected{% endif %}>有年级限制</option>
+          <option value="has_identity" {% if reserved_seats_tag == 'has_identity' %}selected{% endif %}>有身份限制</option>
+          <option value="has_unknown" {% if reserved_seats_tag == 'has_unknown' %}selected{% endif %}>有未解析部分</option>
+        </select>
+        </div>
+        <div class="filter-unit">
+        <label>Class Note</label>
+        <select name="class_note">
+          <option value="">全部</option>
+          <option value="1" {% if class_note=='1' %}selected{% endif %}>有</option>
+          <option value="0" {% if class_note=='0' %}selected{% endif %}>无</option>
+        </select>
+        </div>
+        </div>
+      </div>
+      {% endif %}
+    </form>
+    <p class="small">
+      {% if current_db %}
+      当前数据库: {{ current_db }} | 大课搜索 sync at: {{ show(search_options_synced_at) }} | 共 {{ total_count }} 门课，显示 {{ rows|length }} 门
+      <a class="button" href="{{ url_for('export_courses', db_file=current_db) }}">导出 CSV</a>
+      {% else %}
+      请先选择一个数据库，然后再筛选、查看或导出课程。
+      {% endif %}
+    </p>
+  </div>
+
+  {% if current_db %}
+  <div class="card results-card">
+    <div class="display-options" aria-label="显示信息">
+      <span class="display-options-title">显示信息</span>
+      <label><input type="checkbox" data-column-toggle="course_code" checked>课程</label>
+      <label><input type="checkbox" data-column-toggle="class_nbr" checked>课程号</label>
+      <label><input type="checkbox" data-column-toggle="course_name" checked>课程名</label>
+      <label><input type="checkbox" data-column-toggle="component" checked>课程类型</label>
+      <label><input type="checkbox" data-column-toggle="section" checked>Section</label>
+      <label><input type="checkbox" data-column-toggle="units" checked>学分</label>
+      <label><input type="checkbox" data-column-toggle="session" checked>Session</label>
+      <label><input type="checkbox" data-column-toggle="days" checked>星期</label>
+      <label><input type="checkbox" data-column-toggle="start_time" checked>开始时间</label>
+      <label><input type="checkbox" data-column-toggle="end_time" checked>结束时间</label>
+      <label><input type="checkbox" data-column-toggle="instructor" checked>教授</label>
+      <label><input type="checkbox" data-column-toggle="classroom" checked>教室</label>
+      <label><input type="checkbox" data-column-toggle="grading_basis" checked>评分</label>
+      <label><input type="checkbox" data-column-toggle="status" checked>状态</label>
+      <label><input type="checkbox" data-column-toggle="capacity" checked>剩余/总</label>
+      <label><input type="checkbox" data-column-toggle="waitlist" checked>候补</label>
+      <label><input type="checkbox" data-column-toggle="actions" checked>操作</label>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th data-column="course_code">课程</th>
+          <th data-column="class_nbr">课程号</th>
+          <th data-column="course_name">课程名</th>
+          <th data-column="component">课程类型</th>
+          <th data-column="section">Section</th>
+          <th data-column="units">学分</th>
+          <th data-column="session">Session</th>
+          <th data-column="days">星期</th>
+          <th data-column="start_time">开始时间</th>
+          <th data-column="end_time">结束时间</th>
+          <th data-column="instructor">教授</th>
+          <th data-column="classroom">教室</th>
+          <th data-column="grading_basis">评分</th>
+          <th data-column="status">状态</th>
+          <th data-column="capacity">剩余/总</th>
+          <th data-column="waitlist">候补</th>
+          <th data-column="actions">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td data-column="course_code" class="mono">{% if row['subject'] or row['catalog_nbr'] %}{{ row['subject'] }} {{ row['catalog_nbr'] }}{% else %}{{ missing() }}{% endif %}</td>
+          <td data-column="class_nbr" class="mono">{{ show(row['class_nbr']) }}</td>
+          <td data-column="course_name">{{ show(row['course_name']) }}</td>
+          <td data-column="component">{{ show(row['component']) }}</td>
+          <td data-column="section">{{ show(row['class_section']) }}</td>
+          <td data-column="units">{{ show(row['units']) }}</td>
+          <td data-column="session">{{ show(row['session_code']) }}</td>
+          <td data-column="days">{{ show(row['meeting_days']) }}</td>
+          <td data-column="start_time">{{ show(row['meeting_start_time']) }}</td>
+          <td data-column="end_time">{{ show(row['meeting_end_time']) }}</td>
+          <td data-column="instructor">{{ show(row['instructor_names']) }}</td>
+          <td data-column="classroom">{{ show(row['classroom']) }}</td>
+          <td data-column="grading_basis">{{ show(row['grading_basis']) }}</td>
+          <td data-column="status">{% if not row['enrl_status'] %}{{ missing() }}
+              {% elif row['enrl_status'] == 'Open' %}<span class="ok">Open</span>
+              {% elif row['enrl_status'] == 'Wait List' %}<span class="warn">Wait List</span>
+              {% elif row['enrl_status'] == 'Closed' %}<span class="bad">Closed</span>
+              {% else %}{{ row['enrl_status'] }}{% endif %}</td>
+          <td data-column="capacity">{{ row['enrollment_available'] }}/{{ row['class_capacity'] }}</td>
+          <td data-column="waitlist">{{ row['wait_list_available'] }}/{{ row['wait_list_capacity'] }}</td>
+          <td data-column="actions">{% if row['class_nbr'] %}
+            <a class="button" href="{{ url_for('course_detail_page', class_nbr=row['class_nbr'], term=row['term'], career=current_career, db_file=current_db) }}">详情</a>
+            {% else %}{{ missing() }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="card">
+    <p class="small">当前还没有选定数据库。</p>
+  </div>
+  {% endif %}
+
+  <script>
+    const courseAttributeOptions = {{ course_attribute_options | tojson }};
+    const selectedCourseAttrValue = {{ course_attr_value | tojson }};
+    const columnVisibilityStorageKey = 'dkuCourseVisibleColumnsV1';
+
+    function fullAttributeValue(attr, value) {
+      if (!attr || !value) return value || '';
+      return value.indexOf(attr + '-') === 0 ? value : attr + '-' + value;
+    }
+    function updateCourseAttributeValues() {
+      var attrSelect = document.getElementById('course-attr');
+      var valueSelect = document.getElementById('course-attr-value');
+      var attr = attrSelect.value;
+      valueSelect.innerHTML = '<option value="">全部</option>';
+      if (!attr) return;
+      var option = courseAttributeOptions.find(function(item) {
+        return item.crse_attr === attr;
+      });
+      if (!option) return;
+      (option.values || []).forEach(function(item) {
+        var rawValue = item.crse_attr_value || '';
+        var fullValue = fullAttributeValue(attr, rawValue);
+        var opt = document.createElement('option');
+        opt.value = fullValue;
+        opt.textContent = rawValue + (item.descr ? ' - ' + item.descr : '');
+        if (fullValue === selectedCourseAttrValue) {
+          opt.selected = true;
+        }
+        valueSelect.appendChild(opt);
+      });
+    }
+    var attrSelect = document.getElementById('course-attr');
+    if (attrSelect) {
+      attrSelect.addEventListener('change', updateCourseAttributeValues);
+      updateCourseAttributeValues();
+    }
+
+    function readSavedColumnVisibility() {
+      try {
+        return JSON.parse(localStorage.getItem(columnVisibilityStorageKey) || '{}') || {};
+      } catch (e) {
+        return {};
+      }
+    }
+    function saveColumnVisibility(toggles) {
+      var visibility = {};
+      toggles.forEach(function(toggle) {
+        visibility[toggle.dataset.columnToggle] = toggle.checked;
+      });
+      localStorage.setItem(columnVisibilityStorageKey, JSON.stringify(visibility));
+    }
+    function setColumnVisible(column, visible) {
+      document.querySelectorAll('[data-column="' + column + '"]').forEach(function(cell) {
+        cell.classList.toggle('is-column-hidden', !visible);
+      });
+    }
+    function initColumnVisibility() {
+      var toggles = Array.prototype.slice.call(document.querySelectorAll('[data-column-toggle]'));
+      if (!toggles.length) return;
+      var savedVisibility = readSavedColumnVisibility();
+      toggles.forEach(function(toggle) {
+        var column = toggle.dataset.columnToggle;
+        if (Object.prototype.hasOwnProperty.call(savedVisibility, column)) {
+          toggle.checked = Boolean(savedVisibility[column]);
+        }
+        setColumnVisible(column, toggle.checked);
+        toggle.addEventListener('change', function() {
+          setColumnVisible(column, toggle.checked);
+          saveColumnVisibility(toggles);
+        });
+      });
+    }
+    initColumnVisibility();
+
+    var coll = document.getElementsByClassName("collapsible");
+    for (var i = 0; i < coll.length; i++) {
+      coll[i].addEventListener("click", function() {
+        this.classList.toggle("active");
+        var content = this.nextElementSibling;
+        var results = document.querySelector('.results-card');
+        if (results) results.style.visibility = 'hidden';
+        content.style.display = content.style.display === "block" ? "none" : "block";
+        requestAnimationFrame(function() {
+          if (results) results.style.visibility = '';
+        });
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>DKU 选课小助手</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; max-width: 1100px; }
+    h1, h2 { margin-bottom: 8px; }
+    input, select, button, textarea { margin-top: 4px; margin-bottom: 8px; padding: 8px; box-sizing: border-box; }
+    textarea { font-family: Consolas, monospace; }
+    .button { display: inline-block; padding: 8px 12px; background: #1e66f5; color: white; text-decoration: none; border-radius: 6px; border: none; cursor: pointer; }
+    .button-secondary { background: #666; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .ok { color: #0a7f2e; }
+    .warn { color: #b36b00; }
+    .bad { color: #a40000; }
+    .small { color: #666; font-size: 12px; }
+    .progress-container { margin-top: 12px; }
+    progress { width: 100%; height: 20px; }
+  </style>
+</head>
+<body>
+  <h1>DKU 选课小助手</h1>
+
+  <div class="card">
+    <h2>0. DKU Cookie</h2>
+    <form method="post" action="{{ url_for('save_cookie_route') }}">
+      <textarea name="cookie" rows="5" style="width:100%;" placeholder="粘贴 Cookie">{{ cookie_preview }}</textarea>
+      <button class="button" type="submit">保存 Cookie</button>
+      <button type="button" class="button" id="btnGrabCookie" onclick="startGrabCookie()"
+              style="background:#666;">一键获取 Cookie</button>
+      <button type="button" class="button" onclick="resetGrabCookie()"
+              style="background:#444;font-size:11px;padding:4px 8px;">重置</button>
+      {% if has_cookie %}<span class="ok">已保存</span>{% else %}<span class="bad">未保存</span>{% endif %}
+      <span id="grabStatus" style="margin-left:8px;font-size:12px;"></span>
+      {% if cookie_status %}
+        <span class="{{ cookie_status.level }}">{{ cookie_status.message }}</span>
+      {% endif %}
+    </form>
+    <pre id="grabDebug" style="display:none;margin-top:8px;padding:8px;background:#1e1e1e;color:#0f0;font-size:11px;max-height:200px;overflow-y:auto;border-radius:4px;"></pre>
+    <p class="small" style="color:#888;">一键获取：点击按钮后将自动打开浏览器，在浏览器中登录 DKU Hub 后自动抓取 Cookie。</p>
+  </div>
+
+  <div class="card">
+    <h2>1. 同步数据库</h2>
+    <form id="sync-form" method="post" action="{{ url_for('sync_courses_stream') }}" onsubmit="startSingleSync(); return false;">
+      <label>学期</label>
+      <select name="term" id="sync-term">
+        {% for t in terms %}
+          <option value="{{ t.strm }}" {% if t.strm == current_term %}selected{% endif %}>{{ t.descr }}</option>
+        {% endfor %}
+      </select>
+      <label>学制</label>
+      <select name="career" id="sync-career">
+        {% for c in careers %}
+          <option value="{{ c.acad_career }}" {% if c.acad_career == current_career %}selected{% endif %}>{{ c.descr }}</option>
+        {% endfor %}
+      </select>
+      <label>
+        <input type="checkbox" name="fetch_details" id="sync-fetch-details" value="true">
+        拉取所有课程详细信息
+      </label><br>
+      <button class="button" type="submit">同步选定学期课程</button>
+      <button class="button button-secondary" type="button" onclick="startAllTermsSync()">同步所有历史学期课程</button>
+      <button class="button button-secondary" type="button" id="btn-multi" onclick="startMultiSync()">同步已选多个学期…</button>
+    </form>
+    <div id="multi-term-panel" style="display:none;margin-top:10px;max-height:200px;overflow-y:auto;border:1px solid #d7dee8;padding:8px;border-radius:6px;">
+      {% for t in terms %}
+        <label style="display:block;font-weight:normal;font-size:13px;margin:2px 0;">
+          <input type="checkbox" class="multi-term-cb" value="{{ t.strm }}"> {{ t.descr }} ({{ t.strm }})
+        </label>
+      {% endfor %}
+      <div style="margin-top:8px;">
+        <button class="button button-sm" type="button" onclick="doMultiSync()">开始同步</button>
+        <button class="button button-sm button-secondary" type="button" onclick="document.getElementById('multi-term-panel').style.display='none'">收起</button>
+      </div>
+    </div>
+    <p class="small">同步选定学期和同步所有历史学期都会按学期生成单独的数据库文件。</p>
+    <div id="sync-progress" class="progress-container" style="display:none;">
+      <div class="small" id="sync-progress-title">总进度</div>
+      <progress id="sync-progress-bar" value="0" max="100"></progress>
+      <div id="sync-progress-text"></div>
+    </div>
+    <div id="detail-progress" class="progress-container" style="display:none;">
+      <div class="small" id="detail-progress-title">详情进度</div>
+      <progress id="detail-progress-bar" value="0" max="100"></progress>
+      <div id="detail-progress-text"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. 功能入口</h2>
+    <a class="button" href="{{ url_for('courses') }}">进入课程筛选页面</a>
+    <a class="button button-secondary" href="{{ url_for('schedule') }}">进入自动排课界面</a>
+  </div>
+
+  <script>
+    function ensureCookie() {
+      if (!{{ 'true' if has_cookie else 'false' }}) {
+        alert('请先填写并保存 DKU Cookie');
+        return false;
+      }
+      return true;
+    }
+
+    function formBody() {
+      const fetchDetails = document.getElementById('sync-fetch-details').checked;
+      return 'term=' + encodeURIComponent(document.getElementById('sync-term').value) +
+             '&career=' + encodeURIComponent(document.getElementById('sync-career').value) +
+             '&fetch_details=' + (fetchDetails ? 'true' : 'false');
+    }
+
+    function resetProgress(showDetail) {
+      document.getElementById('sync-progress').style.display = 'block';
+      document.getElementById('sync-progress-bar').value = 0;
+      document.getElementById('sync-progress-bar').max = 100;
+      document.getElementById('sync-progress-text').textContent = '准备开始...';
+      document.getElementById('detail-progress').style.display = showDetail ? 'block' : 'none';
+      document.getElementById('detail-progress-bar').value = 0;
+      document.getElementById('detail-progress-bar').max = 100;
+      document.getElementById('detail-progress-text').textContent = showDetail ? '等待课程详情开始拉取...' : '';
+    }
+
+    async function consumeStream(url, body, mode) {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body
+      });
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              updateProgress(JSON.parse(line.substring(6)), mode);
+            } catch (e) {
+              console.error(e);
+            }
+          }
+        }
+      }
+    }
+
+    function updateProgress(data, mode) {
+      const syncBar = document.getElementById('sync-progress-bar');
+      const syncText = document.getElementById('sync-progress-text');
+      const detailBar = document.getElementById('detail-progress-bar');
+      const detailText = document.getElementById('detail-progress-text');
+
+      if (data.status === 'syncing') {
+        if (mode === 'all') {
+          syncBar.max = data.total;
+          syncBar.value = data.current;
+          syncText.textContent = `正在同步学期 ${data.term_code} (${data.term_descr}) [${data.current}/${data.total}]`;
+        } else {
+          syncBar.max = 100;
+          syncBar.value = 10;
+          syncText.textContent = `正在同步学期 ${data.term_code}`;
+        }
+      } else if (data.status === 'list_completed') {
+        if (mode === 'single') {
+          syncBar.value = document.getElementById('sync-fetch-details').checked ? 40 : 80;
+        }
+        syncText.textContent = `课程列表已拉取，共 ${data.total} 门课`;
+      } else if (data.status === 'details_start') {
+        detailBar.max = data.total || 1;
+        detailBar.value = 0;
+        const prefix = data.term_code ? `${data.term_code} ` : '';
+        detailText.textContent = `${prefix}开始拉取详情：0/${data.total}`;
+      } else if (data.status === 'detail_progress') {
+        detailBar.max = data.total || 1;
+        detailBar.value = data.current;
+        const prefix = data.term_code ? `${data.term_code} ` : '';
+        detailText.textContent = `${prefix}详情进度：${data.current}/${data.total}，当前 class_nbr=${data.class_nbr}`;
+      } else if (data.status === 'completed') {
+        if (mode === 'single') {
+          syncBar.value = syncBar.max;
+          syncText.innerHTML = `已写入 ${data.db_filename}: ${data.count} 门课程。<a href="${data.courses_url}">进入课程筛选页面</a>`;
+        } else {
+          syncBar.value = data.current;
+          syncText.textContent = `已完成 ${data.term_code}: ${data.count} 门课 -> ${data.db_filename}`;
+        }
+      } else if (data.status === 'error') {
+        syncText.textContent = `错误 ${data.term_code || ''}: ${data.error}`;
+      } else if (data.status === 'done') {
+        if (mode === 'all') {
+          syncText.textContent = '所有历史学期同步完毕';
+        }
+      }
+    }
+
+    async function startSingleSync() {
+      if (!ensureCookie()) return;
+      const showDetail = document.getElementById('sync-fetch-details').checked;
+      resetProgress(showDetail);
+      try {
+        await consumeStream('/sync_courses_stream', formBody(), 'single');
+      } catch (err) {
+        document.getElementById('sync-progress-text').textContent = '网络错误: ' + err.message;
+      }
+    }
+
+    async function startAllTermsSync() {
+      if (!ensureCookie()) return;
+      const showDetail = document.getElementById('sync-fetch-details').checked;
+      resetProgress(showDetail);
+      try {
+        const body = 'fetch_details=' + (showDetail ? 'true' : 'false') +
+                     '&career=' + encodeURIComponent(document.getElementById('sync-career').value);
+        await consumeStream('/sync_all_terms_stream', body, 'all');
+      } catch (err) {
+        document.getElementById('sync-progress-text').textContent = '网络错误: ' + err.message;
+      }
+    }
+
+    function startMultiSync() {
+      document.getElementById('multi-term-panel').style.display = 'block';
+    }
+
+    async function doMultiSync() {
+      if (!ensureCookie()) return;
+      var cbs = document.querySelectorAll('.multi-term-cb:checked');
+      if (cbs.length === 0) { alert('请至少选择一个学期'); return; }
+      var terms = [];
+      cbs.forEach(function(cb){ terms.push(cb.value); });
+      const showDetail = document.getElementById('sync-fetch-details').checked;
+      resetProgress(showDetail);
+      try {
+        var body = 'terms=' + encodeURIComponent(terms.join(',')) +
+                   '&fetch_details=' + (showDetail ? 'true' : 'false') +
+                   '&career=' + encodeURIComponent(document.getElementById('sync-career').value);
+        await consumeStream('/sync_selected_terms_stream', body, 'all');
+      } catch (err) {
+        document.getElementById('sync-progress-text').textContent = '网络错误: ' + err.message;
+      }
+    }
+
+    // ── 一键获取 Cookie ──
+    var grabTimer = null;
+    function startGrabCookie() {
+      var btn = document.getElementById('btnGrabCookie');
+      var st = document.getElementById('grabStatus');
+      var dbg = document.getElementById('grabDebug');
+      btn.disabled = true;
+      st.textContent = '启动中...';
+      st.style.color = '#888';
+      dbg.style.display = 'block';
+      function log(msg) { dbg.textContent += '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n'; dbg.scrollTop = dbg.scrollHeight; }
+      if (grabTimer) { clearInterval(grabTimer); grabTimer = null; }
+      log('发送请求到 /grab_cookie ...');
+      fetch('/grab_cookie', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+          log('响应: ' + JSON.stringify(data));
+          if (!data.ok) { st.textContent = data.error; st.style.color = 'red'; btn.disabled = false; return; }
+          log('开始轮询状态...');
+          grabTimer = setInterval(function(){ pollGrabStatus(log); }, 2000);
+        })
+        .catch(err => { log('请求失败: ' + err.message); st.textContent = '请求失败'; st.style.color = 'red'; btn.disabled = false; });
+    }
+    function resetGrabCookie() {
+      var st = document.getElementById('grabStatus');
+      var dbg = document.getElementById('grabDebug');
+      if (grabTimer) { clearInterval(grabTimer); grabTimer = null; }
+      st.textContent = '已重置';
+      st.style.color = '#888';
+      dbg.textContent = '';
+      dbg.style.display = 'none';
+      document.getElementById('btnGrabCookie').disabled = false;
+      fetch('/grab_cookie/reset', { method: 'POST' });
+    }
+    function pollGrabStatus(log) {
+      var btn = document.getElementById('btnGrabCookie');
+      var st = document.getElementById('grabStatus');
+      fetch('/grab_cookie/status')
+        .then(r => r.json())
+        .then(data => {
+          st.textContent = data.message || data.status;
+          if (data.status === 'running') {
+            st.style.color = '#888';
+          } else if (data.status === 'ok') {
+            st.style.color = 'green';
+            st.textContent = 'Cookie 已保存！刷新页面即可';
+            btn.disabled = false;
+            clearInterval(grabTimer);
+            log('完成！Cookie: ' + (data.cookie || ''));
+          } else if (data.status === 'error') {
+            st.style.color = 'red';
+            btn.disabled = false;
+            clearInterval(grabTimer);
+            log('错误: ' + (data.message || ''));
+          } else if (data.status === 'idle') {
+            st.style.color = '#888';
+          }
+          log('状态: ' + data.status + ' | ' + (data.message || ''));
+        })
+        .catch(err => { log('轮询失败: ' + err.message); });
+    }
+  </script>
+</body>
+</html>

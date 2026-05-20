@@ -1,0 +1,473 @@
+<!-- 详情页（保留原逻辑，略作调整） -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>{{ detail.course_code }} - 课程详情</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; max-width: 1100px; }
+    h1, h2, h3 { margin-bottom: 8px; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .pill { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #eef3ff; margin-right: 6px; margin-bottom: 6px; }
+    .mono { font-family: Consolas, monospace; }
+    .button { display: inline-block; padding: 8px 12px; background: #1e66f5; color: white; text-decoration: none; border-radius: 6px; border: none; cursor: pointer; font-size: 14px; }
+    .button-secondary { background: #666; }
+    .small { color: #666; font-size: 12px; }
+    .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+    .sync-meta { display: flex; gap: 12px; flex-wrap: wrap; color: #666; font-size: 12px; }
+    .topbar-spacer { flex: 1; }
+    .inline-form { margin: 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; vertical-align: top; }
+    th { background: #f5f5f5; width: 220px; }
+    .ok { color: #0a7f2e; }
+    .warn { color: #b36b00; }
+    .bad { color: #a40000; }
+    .json-tree { list-style: none; padding-left: 20px; margin: 0; }
+    .json-tree li { margin-top: 2px; }
+    .json-key { color: #881391; cursor: pointer; font-weight: bold; }
+    .json-key:hover { text-decoration: underline; }
+    .json-string { color: #1A1AA6; }
+    .json-number { color: #1C00CF; }
+    .json-boolean { color: #0D22AA; }
+    .json-null { color: #808080; }
+    .json-bracket { color: #000; }
+    .json-container { max-height: 400px; overflow-y: auto; background: #f8f8f8; padding: 10px; font-family: Consolas, monospace; font-size: 13px; }
+    .tree { display: grid; gap: 8px; }
+    .tree-node { border: 1px solid #ccc; border-radius: 8px; padding: 9px 10px; background: #fff; }
+    .tree-node.and { border-color: #9bbcf8; background: #ebf0ff; }
+    .tree-node.or { border-color: #e7c36f; background: #fff8e8; }
+    .tree-node.course { border-color: #9ed6b0; background: #eaf7ef; }
+    .tree-node.special { border-color: #c6b4ec; background: #f5f0ff; }
+    .tree-node.not { border-color: #f1afa8; background: #fff0ee; }
+    .tree-node.pre, .tree-node.co, .tree-node.pre_or_co, .tree-node.corequisite, .tree-node.anti { border-color: #9bbcf8; background: #ebf0ff; }
+    .tree-node.recommend { border-color: #9ed6b0; background: #eaf7ef; }
+    .node-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .node-kind { font-size: 11px; font-weight: 700; color: #666; text-transform: uppercase; }
+    .node-value { font-family: Consolas, monospace; font-weight: 700; }
+    .node-children { margin-top: 8px; padding-left: 16px; border-left: 2px solid rgba(24,33,43,0.16); display: grid; gap: 8px; }
+    .tree-label { color: #555; font-size: 13px; font-weight: bold; margin-bottom: 8px; }
+    .tree-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  </style>
+</head>
+<body>
+  {% macro missing() -%}<span class="bad">信息缺失</span>{%- endmacro %}
+  {% macro show(value, class_name='') -%}
+    {%- if value is not none and value|string|trim -%}
+      {%- if class_name -%}<span class="{{ class_name }}">{{ value }}</span>{%- else -%}{{ value }}{%- endif -%}
+    {%- else -%}
+      {{ missing() }}
+    {%- endif -%}
+  {%- endmacro %}
+
+  <div class="topbar">
+    <a class="button button-secondary" href="{{ url_for('courses', db_file=requested_db) }}">返回课程列表</a>
+    <div class="sync-meta">
+      <span>大课信息 sync at: {{ show(detail.search_synced_at) }}</span>
+      <span>详细信息 sync at: {{ show(detail.detail_synced_at) }}</span>
+    </div>
+    <div class="topbar-spacer"></div>
+    {% if has_cookie %}
+      <form class="inline-form" method="post" action="{{ url_for('sync_course_detail', class_nbr=detail.class_nbr, term=detail.term, db_file=requested_db) }}">
+        <button class="button" type="submit">同步详细信息</button>
+      </form>
+    {% else %}
+      <span class="small">保存 Cookie 后可同步详细信息；当前可先查看大课搜索信息。</span>
+    {% endif %}
+  </div>
+
+  {% if refresh_error %}
+  <div class="card" style="background:#fff3cd; border-color:#ffeeba;">
+    <strong>⚠️ 详情加载提示：</strong> {{ refresh_error }}
+  </div>
+  {% endif %}
+  {% if detail_sync_message %}
+  <div class="card" style="background:#e8f4ff; border-color:#b6dcff;">
+    <strong>同步详细信息：</strong> {{ detail_sync_message }}
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h1>{{ show(detail.course_code) }} - {{ show(detail.course_title) }}</h1>
+    <p><strong>Component:</strong> {{ show(detail.component) }} | <strong>Section:</strong> {{ show(detail.class_section) }} | <strong>Class Nbr:</strong> {{ show(detail.class_nbr, 'mono') }}</p>
+    <p><strong>老师：</strong> {{ show(detail.instructor_names) }} | <strong>邮箱：</strong> {{ show(detail.instructor_emails) }}</p>
+    <p><strong>状态：</strong> {{ show(detail.status) }} | <strong>授课方式：</strong> {{ show(detail.instruction_mode) }} | <strong>评分方式：</strong> {{ show(detail.grading_basis) }}</p>
+    <p><strong>校区：</strong> {{ show(detail.campus) }} | <strong>地点：</strong> {{ show(detail.location) }}</p>
+    <p><strong>教室：</strong> {{ show(detail.classroom) }}</p>
+    <p><strong>Session：</strong> {{ show(detail.session) }} | <strong>Units：</strong> {{ show(detail.units) }}</p>
+  </div>
+
+  <div class="card">
+    <h2>课程时间与余量</h2>
+    <p><strong>Meeting：</strong> {{ show(detail.meeting_text) }}</p>
+    <p><strong>Capacity：</strong> {{ detail.enrollment_available }}/{{ detail.class_capacity }} | <strong>Waitlist：</strong> {{ detail.wait_list_available }}/{{ detail.wait_list_capacity }}</p>
+    {% if detail.reserve_caps %}
+    <p class="warn"><strong>Reserved Seats：</strong>这门课有预留座位限制。即使 Capacity 显示还有剩余，也可能因为你不属于对应预留人群而无法选课。</p>
+    <table>
+      <thead>
+        <tr><th>预留对象</th><th>开始日期</th><th>剩余/总数</th><th>已占用</th></tr>
+      </thead>
+      <tbody>
+      {% for reserve in detail.reserve_caps %}
+        <tr>
+          <td>{{ show(reserve.description) }}</td>
+          <td>{{ show(reserve.start_date) }}</td>
+          <td>{{ reserve.available }}/{{ reserve.capacity }}</td>
+          <td>{{ reserve.enrollment_total }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+    <p>
+      <strong>当前是否允许选课：</strong>
+      {% if detail.enroll_permission_missing %}
+        {{ missing() }}
+      {% elif detail.valid_to_enroll == 'T' and detail.show_enroll %}
+        <span class="ok">可以尝试选课</span>
+      {% else %}
+        <span class="bad">当前不可直接选课</span>
+      {% endif %}
+    </p>
+    <p><strong>购物车：</strong> {{ detail.is_in_cart }} | <strong>已选：</strong> {{ detail.is_enrolled }} | <strong>已候补：</strong> {{ detail.is_waitlisted }}</p>
+  </div>
+
+  <div class="card">
+    <h2>选课要求</h2>
+    <p><strong>原始要求文本：</strong> {{ show(detail.enroll_requirements) }}</p>
+    <p><strong>Duke Instructor：</strong>
+      {% if detail.requirement_designation %}
+        {% if detail.is_duke_instructor %}
+          <span class="ok">是</span>
+        {% else %}
+          <span class="bad">否</span>
+        {% endif %}
+        <span>({{ detail.requirement_designation }}{% if detail.requirement_designation_descr and detail.requirement_designation_descr != detail.requirement_designation %} - {{ detail.requirement_designation_descr }}{% endif %})</span>
+      {% else %}
+        {{ missing() }}
+      {% endif %}
+    </p>
+    <p><strong>Prerequisite：</strong>
+      {% if detail.prerequisites %}
+        {% for x in detail.prerequisites %}<span class="pill">{{ x }}</span>{% endfor %}
+      {% else %}{{ missing() }}{% endif %}
+    </p>
+    <p><strong>Anti-requisite：</strong>
+      {% if detail.antirequisites %}
+        {% for x in detail.antirequisites %}<span class="pill">{{ x }}</span>{% endfor %}
+      {% else %}{{ missing() }}{% endif %}
+    </p>
+    <p><strong>Class Attributes：</strong>
+      {% if detail.class_attribute_list %}
+        {% for x in detail.class_attribute_list %}<span class="pill">{{ x }}</span>{% endfor %}
+      {% else %}{{ missing() }}{% endif %}
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Class Components</h2>
+    <p>{{ show(detail.class_components) }}</p>
+    {% if detail.related_sections %}
+    {% for group in detail.related_sections %}
+    <h3>
+      {% if group.is_required %}必修{% else %}可选{% endif %}{{ group.descr }}
+      <span class="small">({{ group.component }})</span>
+    </h3>
+    {% if group.sections %}
+    <table>
+      <thead><tr><th>Class Nbr</th></tr></thead>
+      <tbody>
+      {% for sec in group.sections %}
+        <tr><td class="mono">{{ sec.class_nbr }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="small">暂无</p>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>课程简介</h2>
+    <p>{{ show(detail.catalog_description) }}</p>
+  </div>
+
+  {% if detail.class_notes %}
+  <div class="card">
+    <h2>Class Notes</h2>
+    <p>{{ show(detail.class_notes) }}</p>
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <h2>Requisite 逻辑树</h2>
+    {% if detail.requisite_parsed_json %}
+    <div id="requisite-meta"></div>
+    <div id="requisite-tree" class="json-container">加载中...</div>
+    {% else %}
+    {{ missing() }}
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Reserved Seats</h2>
+    {% if detail.reserved_seats_parsed_json %}
+    <div id="reserved-seats-area">
+      <p class="small">解析中...</p>
+    </div>
+    {% else %}
+    {{ missing() }}
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>Combined Sections</h2>
+    {% if detail.combined_sections %}
+    <table>
+      <thead><tr><th>Section</th><th>Class Nbr</th><th>状态</th><th>已选</th><th>候补</th><th>容量</th></tr></thead>
+      <tbody>
+      {% for x in detail.combined_sections %}
+        <tr>
+          <td>{{ x.section_descr }}</td>
+          <td class="mono">{{ x.class_nbr }}</td>
+          <td>{{ x.class_enrl_status }}</td>
+          <td>{{ x.enrl_tot }}</td>
+          <td>{{ x.wait_tot }}</td>
+          <td>{{ x.enrl_cap }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ missing() }}
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <h2>大课搜索原始 JSON</h2>
+    <div id="search-raw-tree" class="json-container">加载中...</div>
+  </div>
+
+  <div class="card">
+    <h2>课程详情原始 JSON</h2>
+    <div id="detail-raw-tree" class="json-container">加载中...</div>
+  </div>
+
+  <div class="card">
+    <h2>选课详细原始 JSON (Shopping Cart)</h2>
+    <div id="enroll-detail-raw-tree" class="json-container">加载中...</div>
+  </div>
+
+  <script>
+    function buildTree(obj) {
+      if (obj === null) return '<span class="json-null">null</span>';
+      if (typeof obj === 'undefined') return '<span class="json-undefined">undefined</span>';
+      if (typeof obj === 'string') return '<span class="json-string">"' + obj.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '"</span>';
+      if (typeof obj === 'number') return '<span class="json-number">' + obj + '</span>';
+      if (typeof obj === 'boolean') return '<span class="json-boolean">' + obj + '</span>';
+      if (Array.isArray(obj)) {
+        if (obj.length === 0) return '<span class="json-bracket">[]</span>';
+        var html = '<span class="json-bracket">[</span><ul class="json-tree" style="display:block">';
+        obj.forEach(function(item, index) {
+          html += '<li><span class="json-key">' + index + '</span>: ' + buildTree(item) + '</li>';
+        });
+        html += '</ul><span class="json-bracket">]</span>';
+        return html;
+      }
+      if (typeof obj === 'object') {
+        var keys = Object.keys(obj);
+        if (keys.length === 0) return '<span class="json-bracket">{}</span>';
+        var html = '<span class="json-bracket">{</span><ul class="json-tree" style="display:block">';
+        keys.forEach(function(key) {
+          html += '<li><span class="json-key">"' + key + '"</span>: ' + buildTree(obj[key]) + '</li>';
+        });
+        html += '</ul><span class="json-bracket">}</span>';
+        return html;
+      }
+      return '';
+    }
+    function renderJsonTree(containerId, jsonStr) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+      try {
+        var obj = JSON.parse(jsonStr);
+        container.innerHTML = buildTree(obj);
+        container.querySelectorAll('.json-key').forEach(function(keyEl) {
+          keyEl.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var li = keyEl.parentElement;
+            var ul = li.querySelector(':scope > ul.json-tree');
+            if (ul) {
+              if (ul.style.display === 'none') {
+                ul.style.display = 'block';
+              } else {
+                ul.style.display = 'none';
+              }
+            }
+          });
+        });
+      } catch(e) {
+        container.innerHTML = '<pre style="white-space: pre-wrap; word-break: break-word;">' + jsonStr + '</pre>';
+      }
+    }
+    function nodeKindLabel(tree) {
+      if (!tree) return 'unknown';
+      if (tree.type === 'and') return 'AND - all required';
+      if (tree.type === 'or') return 'OR - choose one';
+      if (tree.type === 'course') return 'COURSE';
+      if (tree.type === 'special') return 'SPECIAL';
+      if (tree.type === 'recommend') return 'RECOMMEND';
+      if (tree.type === 'pre') return 'PRE';
+      if (tree.type === 'co') return 'CO';
+      if (tree.type === 'pre_or_co') return 'PRE/CO';
+      if (tree.type === 'corequisite') return 'CO';
+      if (tree.type === 'anti') return 'ANTI';
+      if (tree.type === 'not') return 'NOT';
+      return tree.type || 'unknown';
+    }
+    function nodeValue(tree) {
+      if (!tree) return '';
+      if (tree.type === 'course') { var v = tree.code || ''; if (tree.notation) v += ' (' + tree.notation + ')'; return v; }
+      if (tree.type === 'special') {
+        var c = tree.condition || '';
+        if (c === 'standing') return 'Standing = ' + (tree.grade === 2 ? 'Sophomore' : tree.grade === 3 ? 'Junior' : tree.grade === 4 ? 'Senior' : 'Grade ' + tree.grade);
+        if (c === 'standing_above') return 'Standing >= ' + (tree.grade === 2 ? 'Sophomore' : tree.grade === 3 ? 'Junior' : tree.grade === 4 ? 'Senior' : 'Grade ' + tree.grade);
+        if (c === 'consent_of_instructor') return 'Instructor Consent';
+        if (c === 'placement') return 'Placement Test';
+        if (c === 'equivalent_course_or_background') return tree.equivalent_to ? 'Equivalent to ' + tree.equivalent_to : 'Equivalent';
+        if (c === 'unknown') return 'Unknown: ' + (tree.text || '');
+        var labels = {not_eap_track:'Non-EAP Track'};
+        return labels[c] || c;
+      }
+      return '';
+    }
+    function filterBoolNodes(tree) {
+      if (!tree || !tree.items) return tree;
+      var filtered = tree.items.filter(function(i) { return i.type !== 'bool'; }).map(filterBoolNodes);
+      if (tree.type === 'and' && filtered.length === 1) return filtered[0];
+      var copy = {};
+      for (var k in tree) copy[k] = tree[k];
+      copy.items = filtered;
+      return copy;
+    }
+    function renderRequisiteTree(containerId, parsed) {
+      var container = document.getElementById(containerId);
+      if (!container) return;
+      var evalTree = parsed.eval_tree;
+      var normTree = parsed.normalized_eval_tree;
+      if (!evalTree && !normTree) { container.innerHTML = '<span class="bad">No parsed logic tree</span>'; return; }
+      container.innerHTML = '';
+      var wrap = document.createElement('div');
+      wrap.className = 'tree-compare';
+      function buildPanel(titleText, tree) {
+        var panel = document.createElement('div');
+        panel.className = 'tree-panel';
+        var title = document.createElement('div');
+        title.className = 'tree-label';
+        title.textContent = titleText;
+        panel.appendChild(title);
+        if (!tree || !tree.items || !tree.items.length) {
+          var empty = document.createElement('div');
+          empty.className = 'small';
+          empty.textContent = 'Not available';
+          panel.appendChild(empty);
+        } else {
+          var treeBox = document.createElement('div');
+          treeBox.className = 'tree';
+          treeBox.appendChild(renderTree(filterBoolNodes(tree)));
+          panel.appendChild(treeBox);
+        }
+        return panel;
+      }
+      function renderTree(tree) {
+        var type = tree && tree.type ? tree.type : 'unknown';
+        var box = document.createElement('div');
+        box.className = 'tree-node ' + type;
+        var head = document.createElement('div');
+        head.className = 'node-head';
+        var kind = document.createElement('span');
+        kind.className = 'node-kind';
+        kind.textContent = nodeKindLabel(tree);
+        head.appendChild(kind);
+        var val = nodeValue(tree);
+        if (val) {
+          var valEl = document.createElement('span');
+          valEl.className = 'node-value';
+          valEl.textContent = val;
+          head.appendChild(valEl);
+        }
+        box.appendChild(head);
+        if (Array.isArray(tree.items) && tree.items.length) {
+          var children = document.createElement('div');
+          children.className = 'node-children';
+          tree.items.forEach(function(child) { children.appendChild(renderTree(child)); });
+          box.appendChild(children);
+        }
+        if (tree.item) {
+          var children = document.createElement('div');
+          children.className = 'node-children';
+          children.appendChild(renderTree(tree.item));
+          box.appendChild(children);
+        }
+        return box;
+      }
+      wrap.appendChild(buildPanel('Eval Tree', evalTree));
+      wrap.appendChild(buildPanel('Normalized Eval Tree', normTree));
+      container.appendChild(wrap);
+    }
+    var searchRawJson = {{ detail.search_raw_json | tojson }};
+    var detailRawJson = {{ detail.raw_json | tojson }};
+    var enrollDetailRawJson = {{ detail.enroll_detail_raw_json | tojson }};
+    renderJsonTree('search-raw-tree', searchRawJson);
+    renderJsonTree('detail-raw-tree', detailRawJson);
+    if (enrollDetailRawJson) {
+      renderJsonTree('enroll-detail-raw-tree', enrollDetailRawJson);
+    } else {
+      document.getElementById('enroll-detail-raw-tree').innerHTML = '<span class="bad">信息缺失</span>';
+    }
+    var requisiteParsedJson = {{ detail.requisite_parsed_json | tojson }};
+    var reservedSeatsParsedJson = {{ detail.reserved_seats_parsed_json | tojson }};
+    if (requisiteParsedJson) {
+      var req = JSON.parse(requisiteParsedJson);
+      var meta = document.getElementById('requisite-meta');
+      if (meta) {
+        var statusClass = req.status === 'parsed' ? 'ok' : (req.status === 'partial' ? 'warn' : 'bad');
+        var html = '<p><strong>Status:</strong> <span class="' + statusClass + '">' + req.status + '</span></p>';
+        var conds = req.special_conditions || [];
+        if (conds.length) {
+          html += '<p><strong>Special Conditions:</strong> ';
+          for (var i = 0; i < conds.length; i++) { html += '<span class="pill">' + conds[i] + '</span> '; }
+          html += '</p>';
+        }
+        var notes = req.notes || [];
+        if (notes.length) {
+          html += '<p class="small"><strong>Notes:</strong> ' + notes.join(' | ') + '</p>';
+        }
+        meta.innerHTML = html;
+      }
+      renderRequisiteTree('requisite-tree', req);
+    }
+    if (reservedSeatsParsedJson) {
+      var caps = JSON.parse(reservedSeatsParsedJson);
+      var rsHtml = '';
+      for (var i = 0; i < caps.length; i++) {
+        var cap = caps[i];
+        var dp = cap.description_parse || {};
+        rsHtml += '<h3>' + (cap.description || 'Reserved Seat') + '</h3>';
+        rsHtml += '<p class="small">Status: ' + dp.status + ' | Capacity: ' + cap.capacity + ' | Enrolled: ' + cap.enrollment_total + ' | Available: ' + cap.available + '</p>';
+        var conds = dp.conditions || [];
+        if (conds.length) {
+          rsHtml += '<table><thead><tr><th>类型</th><th>描述</th></tr></thead><tbody>';
+          for (var j = 0; j < conds.length; j++) {
+            rsHtml += '<tr><td>' + conds[j].type + '</td><td>' + conds[j].label + '</td></tr>';
+          }
+          rsHtml += '</tbody></table>';
+        }
+      }
+      document.getElementById('reserved-seats-area').innerHTML = rsHtml;
+    }
+  </script>
+</body>
+</html>
